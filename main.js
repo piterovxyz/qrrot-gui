@@ -9,7 +9,12 @@ let mainWindow;
 let grpcClient = null;
 const allowedSavePaths = new Set();
 
-const registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
+let registryPath;
+try {
+  registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
+} catch (e) {
+  registryPath = path.join('/mock/path', 'qrrot_registry.json');
+}
 
 async function readRegistry() {
   try {
@@ -30,6 +35,11 @@ async function writeRegistry(data) {
   } catch (err) {
     console.error('failed to write registry:', err);
   }
+}
+
+// Export for testing
+if (process.env.NODE_ENV === 'test') {
+  module.exports = { writeRegistry };
 }
 
 function createWindow() {
@@ -59,8 +69,9 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  protocol.handle('qrrot-media', async (request) => {
+if (app) {
+  app.whenReady().then(() => {
+    protocol.handle('qrrot-media', async (request) => {
     const rawUrl = request.url.slice('qrrot-media://'.length);
     const decodedUrl = decodeURIComponent(rawUrl);
     // the url will be something like stream/key?token=xxx
@@ -168,17 +179,19 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
 
-app.on('window-all-closed', function () {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.on('window-all-closed', function () {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
 
 let currentGrpcAddress = null;
 
+if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
     if (grpcClient && currentGrpcAddress === address) {
@@ -405,3 +418,4 @@ ipcMain.handle('dialog:save', async (event, options) => {
   }
   return result;
 });
+}
