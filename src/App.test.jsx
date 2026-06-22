@@ -87,7 +87,7 @@ describe('App Component', () => {
 
     // Check loading of registry
     await waitFor(() => {
-      expect(mockElectronAPI.getRegistry).toHaveBeenCalled();
+      expect(mockElectronAPI.getKeys).toHaveBeenCalled();
     });
 
     // Check connecting

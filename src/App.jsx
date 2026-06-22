@@ -116,7 +116,7 @@ export default function App() {
 
       const type = detectViewerType(keyEntry.mimeType);
 
-      if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text')) {
+      if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text' || type === 'pdf')) {
          const res = await window.electronAPI.getMemory({ key: keyEntry.key, token: currentToken });
          let url = '';
          let textContent = '';
@@ -125,7 +125,7 @@ export default function App() {
            if (type === 'text') {
                const decoder = new TextDecoder('utf-8');
                textContent = decoder.decode(res.data);
-           } else if (type === 'image') {
+           } else if (type === 'image' || type === 'pdf') {
                const blob = new Blob([res.data], { type: res.mimeType });
                url = URL.createObjectURL(blob);
            }
@@ -656,6 +656,11 @@ export default function App() {
                             </div>
                             <audio src={viewerData.url} controls autoPlay className="w-full outline-none" />
                           </div>
+                        </div>
+                      )}
+                      {viewerData.type === 'pdf' && (
+                        <div className="flex-1 flex items-center justify-center overflow-hidden relative p-4 bg-m3-surface-container-high">
+                          <embed src={viewerData.url} type="application/pdf" className="w-full h-full rounded-xl shadow-2xl" />
                         </div>
                       )}
                       {viewerData.type === 'binary' && (
