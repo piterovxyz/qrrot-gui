@@ -345,3 +345,7 @@ ipcMain.handle('dialog:open', async (event, options) => {
 ipcMain.handle('dialog:save', async (event, options) => {
   return dialog.showSaveDialog(mainWindow, options);
 });
+
+if (process.env.NODE_ENV === 'test') {
+  module.exports = { readRegistry, writeRegistry };
+}
