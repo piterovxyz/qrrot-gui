@@ -40,7 +40,7 @@
   },
   "build": {
     "appId": "com.qrrot.gui",
-    "productName": "qrrot-gui",
+    "productName": "Qrrot",
     "directories": {
       "output": "release"
     },

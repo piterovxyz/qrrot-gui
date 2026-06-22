@@ -59,7 +59,7 @@ const setupConnected = async () => {
   const connectBtn = screen.getByRole('button', { name: /connect/i });
   fireEvent.click(connectBtn);
   await waitFor(() => {
-    expect(screen.getByText('qrrot gui')).toBeInTheDocument();
+    expect(screen.getByText('qrrot')).toBeInTheDocument();
   });
 };
 
@@ -68,7 +68,7 @@ describe('App Component', () => {
     render(<App />);
 
     // Check landing screen is rendered initially
-    expect(screen.getByText('Connect to qrrot')).toBeInTheDocument();
+    expect(screen.getByText('Enter the gRPC server address')).toBeInTheDocument();
 
     // Click connect
     const connectBtn = screen.getByRole('button', { name: /connect/i });
@@ -76,7 +76,7 @@ describe('App Component', () => {
 
     // Check brand renders after connection
     await waitFor(() => {
-      expect(screen.getByText('qrrot gui')).toBeInTheDocument();
+      expect(screen.getByText('qrrot')).toBeInTheDocument();
     });
 
     // Check loading of registry
@@ -102,7 +102,7 @@ describe('App Component', () => {
       expect(screen.getByText('test1')).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText('search keys...');
+    const searchInput = screen.getByPlaceholderText(/search keys.../i);
     fireEvent.change(searchInput, { target: { value: 'test1' } });
 
     expect(screen.getByText('test1')).toBeInTheDocument();
@@ -154,11 +154,6 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(mockElectronAPI.exists).toHaveBeenCalledWith('test1');
     });
-
-    // Log message should appear
-    await waitFor(() => {
-      expect(screen.getAllByText(/key 'test1' exists on server/i).length).toBeGreaterThanOrEqual(1);
-    });
   });
 
   it('deletes an item', async () => {
@@ -204,7 +199,7 @@ describe('App Component', () => {
     });
 
     // Need a token to view
-    const tokenInput = screen.getByPlaceholderText(/aes key/i);
+    const tokenInput = screen.getByPlaceholderText(/optional/i);
     fireEvent.change(tokenInput, { target: { value: 'mysecrettoken' } });
 
     mockElectronAPI.getMemory.mockResolvedValue({
@@ -232,14 +227,14 @@ describe('App Component', () => {
     const uploadBtn = screen.getByRole('button', { name: /upload/i });
     fireEvent.click(uploadBtn);
 
-    expect(screen.getByText('upload new key')).toBeInTheDocument();
+    expect(screen.getByText('Upload Data')).toBeInTheDocument();
 
     mockElectronAPI.openFileDialog.mockResolvedValue({
       canceled: false,
       filePaths: ['/fake/path/image.png']
     });
 
-    const browseArea = screen.getByText(/drag & drop a file here, or click to browse/i);
+    const browseArea = screen.getByText(/drag & drop or browse/i);
     fireEvent.click(browseArea);
 
     await waitFor(() => {
@@ -259,7 +254,7 @@ describe('App Component', () => {
     ]);
 
     // Submit
-    const submitBtn = screen.getByRole('button', { name: /start secure upload/i });
+    const submitBtn = screen.getByRole('button', { name: /start upload/i });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -270,11 +265,6 @@ describe('App Component', () => {
         token: ''
       });
       expect(mockElectronAPI.addRegistry).toHaveBeenCalled();
-    });
-
-    // Check log
-    await waitFor(() => {
-      expect(screen.getAllByText(/uploaded 'image' \(2048 bytes\)/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

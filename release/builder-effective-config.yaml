@@ -1,0 +1,24 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.qrrot.gui
+productName: Qrrot
+files:
+  - filter:
+      - dist/**/*
+      - main.js
+      - preload.js
+      - package.json
+      - proto/**/*
+asarUnpack:
+  - proto/**
+mac:
+  target:
+    - dmg
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage
+electronVersion: 42.4.1
