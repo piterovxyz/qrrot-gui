@@ -364,7 +364,7 @@ export default function App() {
             initial={{ x: -50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
-            className="flex w-full h-full"
+            className="flex w-full h-full overflow-hidden"
           >
             {/* Sidebar */}
             <div className="w-[320px] bg-bg-panel border-r border-border-light backdrop-blur-md flex flex-col h-full z-10 pt-[40px]">
@@ -473,7 +473,7 @@ export default function App() {
       </div>
 
       {/* Workspace Area */}
-      <div className="flex-1 flex flex-col h-full bg-[radial-gradient(circle_at_top_right,rgba(30,30,45,0.2),transparent)] relative z-0">
+      <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(30,30,45,0.2),transparent)] relative z-0">
 
         {/* Workspace Header */}
         <div className="h-20 px-8 flex items-center justify-between border-b border-border-light bg-black/40 backdrop-blur-md drag-region">
@@ -533,7 +533,7 @@ export default function App() {
         </div>
 
         {/* Viewport */}
-        <div className="flex-1 p-8 flex items-center justify-center overflow-hidden">
+        <div className="flex-1 p-8 flex items-center justify-center overflow-hidden min-h-0">
           {loading ? (
             <div className="flex flex-col items-center gap-5">
               <motion.div
