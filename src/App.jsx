@@ -21,7 +21,7 @@ const itemVariants = {
 };
 
 export default function App() {
-  const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:50051');
+  const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:60945');
   const [connected, setConnected] = useState(false);
   const [registry, setRegistry] = useState([]);
   const [connectionError, setConnectionError] = useState('');
@@ -339,7 +339,7 @@ export default function App() {
                     className="bg-m3-surface-container-high border border-m3-outline-variant/30 rounded-full text-m3-on-surface px-5 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-m3-primary focus:border-transparent transition-all shadow-inner"
                     value={grpcAddress}
                     onChange={(e) => setGrpcAddress(e.target.value)}
-                    placeholder="localhost:50051"
+                    placeholder="localhost:60945"
                   />
                 </div>
 
@@ -403,7 +403,7 @@ export default function App() {
                     className="flex-1 bg-transparent border-none text-m3-on-surface px-3 py-1.5 text-xs font-mono outline-none"
                     value={grpcAddress}
                     onChange={(e) => setGrpcAddress(e.target.value)}
-                    placeholder="127.0.0.1:50051"
+                    placeholder="127.0.0.1:60945"
                   />
                   <motion.button
                     whileHover={{ scale: 1.05 }}

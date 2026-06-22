@@ -86,7 +86,7 @@ describe('App Component', () => {
 
     // Check connecting
     await waitFor(() => {
-      expect(mockElectronAPI.connect).toHaveBeenCalledWith('127.0.0.1:50051');
+      expect(mockElectronAPI.connect).toHaveBeenCalledWith('127.0.0.1:60945');
     });
 
     // Check items render

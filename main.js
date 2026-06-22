@@ -218,7 +218,7 @@ ipcMain.handle('grpc:connect', async (event, address) => {
 
     const deadline = Date.now() + 3000;
     return new Promise((resolve) => {
-      grpcClient.waitForReady(deadline, (err) => {
+      grpcClient.waitForReady(deadline, async (err) => {
         if (err) {
           grpcClient.close();
           grpcClient = null;
@@ -226,6 +226,11 @@ ipcMain.handle('grpc:connect', async (event, address) => {
           resolve({ success: false, error: 'Failed to connect: ' + err.message });
         } else {
           const state = grpcClient.getChannel().getConnectivityState(false);
+          try {
+            await writeRegistry([]);
+          } catch (e) {
+            console.error('failed to clear registry on connect:', e);
+          }
           resolve({ success: true, state });
         }
       });
