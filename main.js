@@ -7,6 +7,7 @@ const protoLoader = require('@grpc/proto-loader');
 
 let mainWindow;
 let grpcClient = null;
+const allowedSavePaths = new Set();
 
 const registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
 
@@ -263,6 +264,11 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
 ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
+    if (!allowedSavePaths.has(savePath)) {
+      return reject(new Error('Unauthorized save path'));
+    }
+
+    allowedSavePaths.delete(savePath);
 
     const call = grpcClient.get({ key, token });
     let writeStream = null;
@@ -367,5 +373,9 @@ ipcMain.handle('dialog:open', async (event, options) => {
 });
 
 ipcMain.handle('dialog:save', async (event, options) => {
-  return dialog.showSaveDialog(mainWindow, options);
+  const result = await dialog.showSaveDialog(mainWindow, options);
+  if (!result.canceled && result.filePath) {
+    allowedSavePaths.add(result.filePath);
+  }
+  return result;
 });
