@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package qrrot.v1;
+
+option go_package = "qrrot/api/proto/v1;qrrotv1";
+
+service QrrotService {
+  rpc Get (GetRequest) returns (stream GetResponse);
+  rpc Put (stream PutRequest) returns (PutResponse);
+  rpc Del (DelRequest) returns (DelResponse);
+  rpc Exists (ExistsRequest) returns (ExistsResponse);
+}
+
+message Metadata {
+  string key = 1;
+  string mime_type = 2;
+}
+
+message GetRequest {
+  string key = 1;
+  string token = 2;
+}
+
+message GetResponse {
+  oneof data {
+    Metadata metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+message PutRequest {
+  oneof data {
+    Metadata metadata = 1;
+    bytes chunk = 2;
+  }
+  string token = 3;
+}
+
+message PutResponse {
+  string status = 1;
+}
+
+message DelRequest {
+  string key = 1;
+}
+
+message DelResponse {
+  string status = 1;
+}
+
+message ExistsRequest {
+  string key = 1;
+}
+
+message ExistsResponse {
+  bool exists = 1;
+}

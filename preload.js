@@ -1,0 +1,27 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  connect: (address) => ipcRenderer.invoke('grpc:connect', address),
+  exists: (key) => ipcRenderer.invoke('grpc:exists', key),
+  del: (key) => ipcRenderer.invoke('grpc:del', key),
+  put: (args) => ipcRenderer.invoke('grpc:put', args),
+  get: (args) => ipcRenderer.invoke('grpc:get', args),
+
+  getRegistry: () => ipcRenderer.invoke('registry:list'),
+  addRegistry: (entry) => ipcRenderer.invoke('registry:add', entry),
+  removeRegistry: (key) => ipcRenderer.invoke('registry:remove', key),
+
+  openFileDialog: (options) => ipcRenderer.invoke('dialog:open', options),
+  saveFileDialog: (options) => ipcRenderer.invoke('dialog:save', options),
+
+  onUploadProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('upload-progress', listener);
+    return () => ipcRenderer.off('upload-progress', listener);
+  },
+  onDownloadProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('download-progress', listener);
+    return () => ipcRenderer.off('download-progress', listener);
+  }
+});
