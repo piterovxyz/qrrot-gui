@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, HardDrive, Upload, Image as ImageIcon, FileText, FileJson,
   FileCode, Video, Music, Box, CheckCircle2, XCircle, Trash2, Download,
@@ -19,7 +20,7 @@ function formatBytes(bytes, decimals = 2) {
 // Helper: Get Icon based on mime
 function getIcon(mimeType) {
   const mime = mimeType.toLowerCase();
-  if (mime.startsWith('image/')) return <ImageIcon className="text-cyan-400" size={18} />;
+  if (mime.startsWith('image/')) return <ImageIcon className="text-orange-primary" size={18} />;
   if (mime.startsWith('video/')) return <Video className="text-violet-400" size={18} />;
   if (mime.startsWith('audio/')) return <Music className="text-pink-400" size={18} />;
   if (mime.startsWith('text/')) return <FileText className="text-blue-400" size={18} />;
@@ -56,6 +57,8 @@ export default function App() {
   const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:50051');
   const [connected, setConnected] = useState(false);
   const [registry, setRegistry] = useState([]);
+  const [connectionError, setConnectionError] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState(null);
   const [token, setToken] = useState('');
@@ -84,8 +87,7 @@ export default function App() {
   }, [logs, consoleExpanded]);
 
   useEffect(() => {
-    fetchRegistry();
-    connectGrpc();
+    // Wait for manual connection
   }, []);
 
   useEffect(() => {
@@ -114,19 +116,26 @@ export default function App() {
 
   const connectGrpc = async () => {
     if (!window.electronAPI) return;
+    setIsConnecting(true);
+    setConnectionError('');
     addLog(`connecting to ${grpcAddress}...`, 'info');
     try {
       const res = await window.electronAPI.connect(grpcAddress);
       if (res.success) {
         setConnected(true);
         addLog(res.cached ? 'using cached grpc connection' : 'connected to grpc server', 'success');
+        fetchRegistry();
       } else {
         setConnected(false);
+        setConnectionError(`Connection failed: ${res.error}`);
         addLog(`connection failed: ${res.error}`, 'error');
       }
     } catch (err) {
       setConnected(false);
+      setConnectionError(`Connection error: ${err.message}`);
       addLog(`connection error: ${err.message}`, 'error');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -170,10 +179,6 @@ export default function App() {
 
   const handleViewKey = async () => {
     if (!selectedKey) return;
-    if (!token) {
-        addLog(`token required to view '${selectedKey.key}'`, 'error');
-        return;
-    }
 
     try {
       setLoading(true);
@@ -232,10 +237,6 @@ export default function App() {
 
   const handleDownloadKey = async () => {
     if (!selectedKey) return;
-    if (!token) {
-        addLog(`token required to save '${selectedKey.key}'`, 'error');
-        return;
-    }
 
     try {
       const saveDialog = await window.electronAPI.saveFileDialog({
@@ -338,15 +339,76 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen bg-bg-dark text-gray-100 font-sans overflow-hidden select-none" onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}>
       {/* Glow effects */}
-      <div className="bg-glow bg-cyan-primary -top-[100px] -left-[100px]"></div>
-      <div className="bg-glow bg-violet-primary -bottom-[100px] -right-[100px]"></div>
+      <div className="bg-glow bg-orange-primary -top-[100px] -left-[100px]"></div>
+      <div className="bg-glow bg-orange-hover -bottom-[100px] -right-[100px]"></div>
 
-      {/* Sidebar */}
-      <div className="w-[320px] bg-bg-panel border-r border-border-light backdrop-blur-md flex flex-col h-full z-10 pt-[40px]">
+      <AnimatePresence mode="wait">
+        {!connected ? (
+          <motion.div
+            key="landing"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/40 drag-region"
+          >
+            <div className="w-full max-w-[450px] bg-bg-panel border border-border-light rounded-3xl p-10 flex flex-col gap-6 shadow-2xl no-drag-region">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-orange-primary/20 flex items-center justify-center mb-2">
+                  <HardDrive className="text-orange-primary" size={32} />
+                </div>
+                <h1 className="text-2xl font-bold tracking-tight text-white">Connect to qrrot</h1>
+                <p className="text-sm text-gray-400">Enter the gRPC server address to connect</p>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Host Address</label>
+                  <input
+                    type="text"
+                    className="bg-black/40 border border-border-light rounded-xl text-gray-100 px-4 py-3 text-sm font-mono outline-none focus:border-orange-primary transition-colors"
+                    value={grpcAddress}
+                    onChange={(e) => setGrpcAddress(e.target.value)}
+                    placeholder="localhost:60945"
+                  />
+                </div>
+
+
+
+                {connectionError && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-2 rounded-xl text-xs">
+                    {connectionError}
+                  </div>
+                )}
+                <button
+                  className="w-full bg-orange-primary hover:bg-orange-hover text-white rounded-xl px-4 py-3 text-sm font-bold transition-colors mt-2 flex items-center justify-center gap-2"
+                  onClick={connectGrpc}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                      Connecting...
+                    </>
+                  ) : "Connect"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="workspace"
+            initial={{ x: -50, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
+            className="flex w-full h-full"
+          >
+            {/* Sidebar */}
+            <div className="w-[320px] bg-bg-panel border-r border-border-light backdrop-blur-md flex flex-col h-full z-10 pt-[40px]">
         {/* Brand */}
-        <div className="px-6 py-5 flex items-center gap-3 border-b border-border-light">
-          <HardDrive className="text-cyan-400" size={24} />
-          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent lowercase">
+        <div className="px-6 py-5 flex items-center gap-3 border-b border-border-light drag-region">
+          <HardDrive className="text-orange-primary" size={24} />
+          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-orange-primary to-orange-hover bg-clip-text text-transparent lowercase">
             qrrot gui
           </h1>
         </div>
@@ -363,13 +425,13 @@ export default function App() {
           <div className="flex gap-2">
             <input
               type="text"
-              className="flex-1 bg-black/30 border border-border-light rounded-md text-gray-100 px-3 py-1.5 text-sm font-mono outline-none focus:border-cyan-400 transition-colors"
+              className="flex-1 bg-black/30 border border-border-light rounded-xl text-gray-100 px-3 py-1.5 text-sm font-mono outline-none focus:border-orange-primary transition-colors"
               value={grpcAddress}
               onChange={(e) => setGrpcAddress(e.target.value)}
               placeholder="127.0.0.1:50051"
             />
             <button
-              className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors"
+              className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors"
               onClick={connectGrpc}
             >
               <RefreshCw size={16} />
@@ -381,7 +443,7 @@ export default function App() {
         <div className="px-5 pt-4 pb-2 flex justify-between items-center">
           <h2 className="text-xs uppercase tracking-widest text-gray-400 font-semibold">data index</h2>
           <button
-            className="flex items-center gap-1 bg-gradient-to-br from-cyan-500 to-violet-500 hover:opacity-90 text-white rounded-md px-2 py-1 text-xs font-medium transition-opacity"
+            className="flex items-center gap-1 bg-gradient-to-br from-orange-primary to-orange-hover hover:opacity-90 text-white rounded-xl px-2 py-1 text-xs font-medium transition-opacity"
             onClick={() => setShowUploadPanel(true)}
           >
             <Upload size={12} />
@@ -395,7 +457,7 @@ export default function App() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
             <input
               type="text"
-              className="w-full bg-black/30 border border-border-light rounded-md text-gray-100 pl-9 pr-3 py-1.5 text-sm font-mono outline-none focus:border-cyan-400 transition-colors"
+              className="w-full bg-black/30 border border-border-light rounded-xl text-gray-100 pl-9 pr-3 py-1.5 text-sm font-mono outline-none focus:border-orange-primary transition-colors"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="search keys..."
@@ -409,16 +471,21 @@ export default function App() {
             <div
               key={item.key}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all border border-transparent",
-                selectedKey?.key === item.key
-                  ? "bg-cyan-500/10 border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.05)]"
-                  : "hover:bg-white/5 hover:border-white/10"
+                "relative flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all border border-transparent",
+                !selectedKey || selectedKey.key !== item.key ? "hover:bg-white/5 hover:border-white/10" : ""
               )}
               onClick={() => handleSelectKey(item)}
             >
+              {selectedKey?.key === item.key && (
+                <motion.div
+                  layoutId="activeIndicator"
+                  className="absolute inset-0 bg-orange-primary/10 border border-orange-primary/30 rounded-xl shadow-[0_0_12px_rgba(255,107,0,0.15)] z-0"
+                  transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
+                />
+              )}
               <div className={cn(
-                "w-9 h-9 rounded-md flex items-center justify-center shrink-0 border",
-                selectedKey?.key === item.key ? "bg-cyan-500/20 border-cyan-500/40" : "bg-white/5 border-border-light"
+                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border relative z-10",
+                selectedKey?.key === item.key ? "bg-orange-primary/20 border-orange-primary/40" : "bg-white/5 border-border-light"
               )}>
                 {getIcon(item.mimeType)}
               </div>
@@ -444,7 +511,7 @@ export default function App() {
       <div className="flex-1 flex flex-col h-full bg-[radial-gradient(circle_at_top_right,rgba(30,30,45,0.2),transparent)] relative z-0">
 
         {/* Workspace Header */}
-        <div className="h-20 px-8 flex items-center justify-between border-b border-border-light bg-black/40 backdrop-blur-md">
+        <div className="h-20 px-8 flex items-center justify-between border-b border-border-light bg-black/40 backdrop-blur-md drag-region">
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold">{selectedKey ? selectedKey.key : 'no key selected'}</h2>
             {selectedKey && (
@@ -455,39 +522,39 @@ export default function App() {
           </div>
 
           {selectedKey && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-black/20 border border-border-light rounded-md px-2 py-1">
+            <div className="flex items-center gap-3 no-drag-region">
+              <div className="flex items-center gap-2 bg-black/20 border border-border-light rounded-xl px-2 py-1">
                 <span className="text-xs text-gray-500 lowercase">token</span>
                 <input
                   type="password"
                   className="bg-transparent border-none text-gray-100 text-sm font-mono outline-none w-32"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="aes key"
+                  placeholder="aes key (optional)"
                 />
               </div>
               <button
-                className="bg-gradient-to-r from-cyan-500 to-violet-500 hover:opacity-90 text-white rounded-md px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
+                className="bg-gradient-to-r from-orange-primary to-orange-hover hover:opacity-90 text-white rounded-xl px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
                 onClick={handleViewKey}
               >
                 <Eye size={16} /> decrypt
               </button>
               <button
-                className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-md px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
+                className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
                 onClick={handleDownloadKey}
               >
                 <Download size={16} /> save
               </button>
               <div className="w-px h-6 bg-border-light mx-1"></div>
               <button
-                className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-md px-3 py-1.5 text-sm font-semibold transition-all"
+                className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all"
                 onClick={handleCheckExists}
                 title="Check Exists"
               >
                 <CheckCircle2 size={16} />
               </button>
               <button
-                className="bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 rounded-md px-3 py-1.5 text-sm font-semibold transition-all"
+                className="bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all"
                 onClick={handleDeleteKey}
                 title="Delete"
               >
@@ -498,15 +565,21 @@ export default function App() {
         </div>
 
         {/* Viewport */}
-        <div className="flex-1 p-8 flex items-center justify-center overflow-hidden mb-8">
+        <div className={`flex-1 p-8 flex items-center justify-center overflow-hidden ${consoleExpanded ? 'mb-[200px]' : 'mb-8'} transition-all duration-300 ease-in-out`}>
           {loading ? (
             <div className="flex flex-col items-center gap-5">
-              <div className="w-12 h-12 border-4 border-white/5 border-t-cyan-500 rounded-full animate-spin"></div>
+              <motion.div
+                animate={{ scale: [1, 1.15, 1], rotate: [0, 360] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                className="w-16 h-16 rounded-full bg-orange-primary/10 flex items-center justify-center border border-orange-primary/30 shadow-[0_0_15px_rgba(255,107,0,0.4)]"
+              >
+                <div className="text-3xl text-orange-primary">⚡</div>
+              </motion.div>
               <p className="text-gray-400 text-sm">{loadingText}</p>
               {loadingProgress !== null && (
                 <div className="w-48 text-center">
                   <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mt-2">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all duration-100 ease-out" style={{ width: `${loadingProgress}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-orange-primary to-orange-hover transition-all duration-100 ease-out" style={{ width: `${loadingProgress}%` }}></div>
                   </div>
                   <div className="text-xs text-gray-400 font-mono mt-1">
                      {loadingText.includes('downloading') ? `${loadingProgress} KB` : `${loadingProgress}%`}
@@ -517,24 +590,24 @@ export default function App() {
           ) : viewerData ? (
             <div className="w-full h-full bg-bg-panel border border-border-light rounded-xl backdrop-blur-xl flex flex-col overflow-hidden shadow-2xl relative">
               {viewerData.type === 'text' && (
-                <pre className="flex-1 bg-black/40 p-6 font-mono text-sm text-cyan-200 overflow-auto whitespace-pre-wrap select-text">
+                <pre className="flex-1 bg-black/40 p-6 font-mono text-sm text-orange-primary overflow-auto whitespace-pre-wrap select-text">
                   {viewerData.text}
                 </pre>
               )}
               {viewerData.type === 'image' && (
                 <div className="flex-1 flex items-center justify-center bg-black/60 overflow-hidden relative p-4">
-                  <img src={viewerData.url} alt={selectedKey?.key} className="max-w-full max-h-full object-contain rounded-md shadow-lg" />
+                  <img src={viewerData.url} alt={selectedKey?.key} className="max-w-full max-h-full object-contain rounded-xl shadow-lg" />
                 </div>
               )}
               {viewerData.type === 'video' && (
                 <div className="flex-1 flex items-center justify-center bg-black/60 overflow-hidden relative p-4">
-                  <video src={viewerData.url} controls autoPlay className="max-w-full max-h-full rounded-md shadow-lg outline-none" />
+                  <video src={viewerData.url} controls autoPlay className="max-w-full max-h-full rounded-xl shadow-lg outline-none" />
                 </div>
               )}
               {viewerData.type === 'audio' && (
                 <div className="flex-1 flex items-center justify-center bg-black/60 relative p-4">
-                  <div className="flex flex-col items-center gap-5 p-10 bg-white/5 rounded-2xl border border-border-light w-[400px] shadow-xl">
-                    <div className="w-32 h-32 rounded-full bg-[radial-gradient(circle,#27272a_40%,#09090b_100%)] flex items-center justify-center text-5xl text-cyan-500 border-4 border-border-light animate-[spin_8s_linear_infinite]">
+                  <div className="flex flex-col items-center gap-5 p-10 bg-white/5 rounded-3xl border border-border-light w-[400px] shadow-xl">
+                    <div className="w-32 h-32 rounded-full bg-[radial-gradient(circle,#27272a_40%,#09090b_100%)] flex items-center justify-center text-5xl text-orange-primary border-4 border-border-light animate-[spin_8s_linear_infinite]">
                       <Music />
                     </div>
                     <audio src={viewerData.url} controls autoPlay className="w-full outline-none mt-4" />
@@ -547,7 +620,7 @@ export default function App() {
                     <Box size={64} className="text-violet-500 drop-shadow-[0_0_10px_rgba(139,92,246,0.3)]" />
                     <p className="text-gray-400">binary file / unsupported preview</p>
                     <p className="text-xs text-gray-500 font-mono">{viewerData.mimeType}</p>
-                    <button className="bg-white/10 hover:bg-white/20 border border-border-light text-white rounded-md px-4 py-2 text-sm font-semibold transition-all mt-2 flex items-center gap-2" onClick={handleDownloadKey}>
+                    <button className="bg-white/10 hover:bg-white/20 border border-border-light text-white rounded-xl px-4 py-2 text-sm font-semibold transition-all mt-2 flex items-center gap-2" onClick={handleDownloadKey}>
                       <Download size={16} /> Download File
                     </button>
                   </div>
@@ -556,7 +629,7 @@ export default function App() {
             </div>
           ) : (
             <div className="text-center flex flex-col items-center gap-4 text-gray-500">
-              <div className="text-6xl bg-gradient-to-b from-cyan-400 to-violet-500 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.2)] animate-[float_4s_ease-in-out_infinite]">⚡</div>
+              <div className="text-6xl bg-gradient-to-b from-orange-primary to-orange-hover bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.2)] animate-[float_4s_ease-in-out_infinite]">⚡</div>
               <p className="text-sm">select an item and insert decryption token, or upload a new file.</p>
             </div>
           )}
@@ -565,9 +638,9 @@ export default function App() {
         {/* Upload Panel Overlay */}
         {showUploadPanel && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-10">
-            <div className="w-full max-w-[550px] bg-bg-panel border border-border-light rounded-2xl p-8 flex flex-col gap-5 shadow-2xl">
+            <div className="w-full max-w-[550px] bg-bg-panel border border-border-light rounded-3xl p-8 flex flex-col gap-5 shadow-2xl">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
+                <h3 className="text-lg font-semibold bg-gradient-to-r from-orange-primary to-orange-hover bg-clip-text text-transparent">
                   upload new key
                 </h3>
                 <button className="text-gray-400 hover:text-white transition-colors" onClick={() => setShowUploadPanel(false)}>
@@ -578,14 +651,14 @@ export default function App() {
               <div
                 className={cn(
                   "border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all flex flex-col items-center gap-3",
-                  dragActive ? "border-cyan-500 bg-cyan-500/10" : "border-white/15 bg-white/5 hover:border-cyan-500 hover:bg-cyan-500/5"
+                  dragActive ? "border-orange-primary bg-orange-primary/10" : "border-white/15 bg-white/5 hover:border-orange-primary hover:bg-orange-primary/5"
                 )}
                 onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop} onClick={selectUploadFile}
               >
-                <FileUp size={40} className="text-cyan-400" />
+                <FileUp size={40} className="text-orange-primary" />
                 {uploadForm.fileName ? (
                   <div>
-                    <p className="font-semibold text-cyan-300">{uploadForm.fileName}</p>
+                    <p className="font-semibold text-orange-primary">{uploadForm.fileName}</p>
                     <p className="text-xs text-gray-500 mt-1">click or drop another file to change</p>
                   </div>
                 ) : (
@@ -604,7 +677,7 @@ export default function App() {
                       type="text" required value={uploadForm.key}
                       onChange={(e) => setUploadForm(prev => ({ ...prev, key: e.target.value }))}
                       placeholder="e.g. users_photo"
-                      className="bg-black/30 border border-border-light rounded-md text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-cyan-400"
+                      className="bg-black/30 border border-border-light rounded-xl text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-orange-primary"
                     />
                   </div>
                   <div className="flex-1 flex flex-col gap-1.5">
@@ -613,7 +686,7 @@ export default function App() {
                       type="text" required value={uploadForm.mimeType}
                       onChange={(e) => setUploadForm(prev => ({ ...prev, mimeType: e.target.value }))}
                       placeholder="e.g. image/png"
-                      className="bg-black/30 border border-border-light rounded-md text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-cyan-400"
+                      className="bg-black/30 border border-border-light rounded-xl text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-orange-primary"
                     />
                   </div>
                 </div>
@@ -623,12 +696,12 @@ export default function App() {
                     type="password" value={uploadForm.token}
                     onChange={(e) => setUploadForm(prev => ({ ...prev, token: e.target.value }))}
                     placeholder="token to derive key from"
-                    className="bg-black/30 border border-border-light rounded-md text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-cyan-400"
+                    className="bg-black/30 border border-border-light rounded-xl text-gray-100 px-3 py-2 text-sm font-sans outline-none focus:border-orange-primary"
                   />
                 </div>
                 <button
                   type="submit" disabled={!uploadForm.key || !uploadForm.filePath}
-                  className="bg-gradient-to-r from-cyan-500 to-violet-500 hover:opacity-90 disabled:opacity-50 text-white rounded-md px-4 py-2.5 text-sm font-semibold transition-all mt-2 w-full"
+                  className="bg-gradient-to-r from-orange-primary to-orange-hover hover:opacity-90 disabled:opacity-50 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-all mt-2 w-full"
                 >
                   start secure upload
                 </button>
@@ -638,12 +711,14 @@ export default function App() {
         )}
 
         {/* Collapsible Console Footer */}
-        <div className={cn(
-            "absolute bottom-0 left-0 w-full bg-black/90 border-t border-border-light transition-all duration-300 ease-in-out flex flex-col z-40",
-            consoleExpanded ? "h-[200px]" : "h-8"
-        )}>
+        <motion.div
+            initial={false}
+            animate={{ height: consoleExpanded ? 200 : 32 }}
+            transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
+            className="absolute bottom-0 left-0 w-full bg-black/90 border-t border-border-light flex flex-col z-40 overflow-hidden"
+        >
            <div
-             className="flex items-center justify-between px-4 h-8 cursor-pointer hover:bg-white/5 transition-colors select-none"
+             className="flex items-center justify-between px-4 h-8 min-h-[32px] cursor-pointer hover:bg-white/5 transition-colors select-none"
              onClick={() => setConsoleExpanded(!consoleExpanded)}
            >
               <div className="flex items-center gap-3 overflow-hidden">
@@ -660,26 +735,27 @@ export default function App() {
               </div>
            </div>
 
-           {consoleExpanded && (
-              <div className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs flex flex-col gap-1 select-text scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                {logs.map((log, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
-                    <span className={cn(
-                      log.type === 'error' && "text-red-400",
-                      log.type === 'success' && "text-green-400",
-                      log.type === 'info' && "text-cyan-400"
-                    )}>
-                      {log.text}
-                    </span>
-                  </div>
-                ))}
-                <div ref={consoleEndRef} />
-              </div>
-           )}
-        </div>
+           <div className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs flex flex-col gap-1 select-text scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+             {logs.map((log, idx) => (
+               <div key={idx} className="flex gap-2">
+                 <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
+                 <span className={cn(
+                   log.type === 'error' && "text-red-400",
+                   log.type === 'success' && "text-green-400",
+                   log.type === 'info' && "text-orange-primary"
+                 )}>
+                   {log.text}
+                 </span>
+               </div>
+             ))}
+             <div ref={consoleEndRef} />
+           </div>
+        </motion.div>
 
-      </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
