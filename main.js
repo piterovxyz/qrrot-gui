@@ -55,10 +55,70 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  protocol.handle('qrrot-media', (request) => {
-    const rawPath = request.url.slice('qrrot-media://'.length);
-    const decodedPath = decodeURIComponent(rawPath);
-    return net.fetch(url.pathToFileURL(decodedPath).toString());
+  protocol.handle('qrrot-media', async (request) => {
+    const rawUrl = request.url.slice('qrrot-media://'.length);
+    const decodedUrl = decodeURIComponent(rawUrl);
+    // the url will be something like stream/key?token=xxx
+    if (decodedUrl.startsWith('stream/')) {
+      const urlObj = new URL(request.url);
+      const key = urlObj.pathname.replace('//stream/', '');
+      const token = urlObj.searchParams.get('token');
+
+      if (!grpcClient) {
+        return new Response('Not connected', { status: 500 });
+      }
+
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+
+      const call = grpcClient.get({ key, token });
+
+      // We wait for the first chunk to arrive before we return the response
+      // so we can set the content type correctly.
+      let responseMimeType = 'application/octet-stream';
+
+      return new Promise((resolve, reject) => {
+        let firstChunkReceived = false;
+
+        call.on('data', async (res) => {
+          if (res.metadata) {
+            responseMimeType = res.metadata.mime_type;
+          } else if (res.chunk) {
+            if (!firstChunkReceived) {
+              firstChunkReceived = true;
+              resolve(new Response(readable, {
+                headers: { 'Content-Type': responseMimeType }
+              }));
+            }
+            try {
+              await writer.write(res.chunk);
+            } catch (e) {
+              console.error('error writing to stream', e);
+            }
+          }
+        });
+
+        call.on('end', () => {
+          if (!firstChunkReceived) {
+            // Handle empty files or missing data gracefully
+            resolve(new Response(readable, {
+              headers: { 'Content-Type': responseMimeType }
+            }));
+          }
+          writer.close();
+        });
+
+        call.on('error', (err) => {
+          console.error('grpc get error:', err);
+          if (!firstChunkReceived) {
+            resolve(new Response('Error', { status: 500 }));
+          }
+          writer.abort(err);
+        });
+      });
+    }
+
+    return net.fetch(url.pathToFileURL(decodedUrl).toString());
   });
 
   createWindow();
@@ -72,8 +132,17 @@ app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
 
+let currentGrpcAddress = null;
+
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
+    if (grpcClient && currentGrpcAddress === address) {
+      const state = grpcClient.getChannel().getConnectivityState(true);
+      if (state !== grpc.connectivityState.TRANSIENT_FAILURE && state !== grpc.connectivityState.SHUTDOWN) {
+         return { success: true, state, cached: true };
+      }
+    }
+
     const packageDefinition = protoLoader.loadSync(
       path.join(__dirname, 'proto/qrrot.proto'),
       {
@@ -94,6 +163,7 @@ ipcMain.handle('grpc:connect', async (event, address) => {
       address,
       grpc.credentials.createInsecure()
     );
+    currentGrpcAddress = address;
 
     return new Promise((resolve) => {
       const state = grpcClient.getChannel().getConnectivityState(true);
@@ -166,25 +236,19 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
   });
 });
 
-ipcMain.handle('grpc:get', async (event, { key, token, savePath }) => {
+ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
 
     const call = grpcClient.get({ key, token });
     let writeStream = null;
-    let resolvedPath = savePath;
     let mimeType = '';
     let bytesDownloaded = 0;
 
     call.on('data', (res) => {
       if (res.metadata) {
         mimeType = res.metadata.mime_type;
-        if (!resolvedPath) {
-          const tempDir = app.getPath('temp');
-          const ext = path.extname(key) || `.${mimeType.split('/')[1] || 'bin'}`;
-          resolvedPath = path.join(tempDir, `qrrot_${Date.now()}_${key}${ext}`);
-        }
-        writeStream = fs.createWriteStream(resolvedPath);
+        writeStream = fs.createWriteStream(savePath);
         writeStream.on('error', (err) => {
           reject(err);
         });
@@ -200,7 +264,7 @@ ipcMain.handle('grpc:get', async (event, { key, token, savePath }) => {
     call.on('end', () => {
       if (writeStream) {
         writeStream.end(() => {
-          resolve({ filePath: resolvedPath, mimeType, size: bytesDownloaded });
+          resolve({ filePath: savePath, mimeType, size: bytesDownloaded });
         });
       } else {
         reject(new Error('key not found or invalid response'));
@@ -211,6 +275,41 @@ ipcMain.handle('grpc:get', async (event, { key, token, savePath }) => {
       if (writeStream) {
         writeStream.destroy();
       }
+      reject(err);
+    });
+  });
+});
+
+ipcMain.handle('grpc:get:memory', async (event, { key, token }) => {
+  return new Promise((resolve, reject) => {
+    if (!grpcClient) return reject(new Error('not connected to grpc server'));
+
+    const call = grpcClient.get({ key, token });
+    let mimeType = '';
+    let bytesDownloaded = 0;
+    const chunks = [];
+
+    call.on('data', (res) => {
+      if (res.metadata) {
+        mimeType = res.metadata.mime_type;
+      } else if (res.chunk) {
+        bytesDownloaded += res.chunk.length;
+        chunks.push(res.chunk);
+        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded });
+      }
+    });
+
+    call.on('end', () => {
+      if (chunks.length > 0 || mimeType) {
+        const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+        const resultBuffer = Buffer.concat(chunks, totalLength);
+        resolve({ mimeType, size: bytesDownloaded, data: resultBuffer });
+      } else {
+        reject(new Error('key not found or invalid response'));
+      }
+    });
+
+    call.on('error', (err) => {
       reject(err);
     });
   });
