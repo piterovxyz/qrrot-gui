@@ -195,13 +195,19 @@ ipcMain.handle('grpc:del', async (event, key) => {
 });
 
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
+  if (!grpcClient) throw new Error('not connected to grpc server');
+
+  let fileStats;
+  try {
+    fileStats = await fs.promises.stat(filePath);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('file does not exist');
+    throw err;
+  }
+
+  const totalSize = fileStats.size;
+
   return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    if (!fs.existsSync(filePath)) return reject(new Error('file does not exist'));
-
-    const fileStats = fs.statSync(filePath);
-    const totalSize = fileStats.size;
-
     const call = grpcClient.put((err, res) => {
       if (err) return reject(err);
       resolve({ status: res.status, size: totalSize });
