@@ -1,55 +1,55 @@
-# Qrrot GUI
+# qrrot gui
 
-Десктопный клиент для базы данных Qrrot. Построен на Electron, React и Vite.
+desktop client for the qrrot database. built on electron, react, and vite.
 
-## Принцип работы
+## how it works
 
-1. **gRPC протокол:** Приложение взаимодействует с сервером Qrrot по протоколу gRPC. Схема API загружается из файла `proto/qrrot.proto`.
-2. **Локальный реестр:** Список загруженных ключей сохраняется локально в файле `qrrot_registry.json` в рабочей директории приложения (`userData`).
-3. **Потоковая передача:** Запись и чтение файлов осуществляются чанками по 64 КБ через gRPC-стримы (запросы `Put` и `Get`), что исключает ограничения gRPC на максимальный размер сообщения.
-4. **Просмотр файлов:** Поддерживается воспроизведение и предпросмотр медиафайлов (изображения, аудио, видео, текст) непосредственно в интерфейсе после их дешифрования.
+1. **grpc protocol:** the application interacts with the qrrot server via the grpc protocol. the api schema is loaded from the `proto/qrrot.proto` file.
+2. **local registry:** the list of uploaded keys is saved locally in the `qrrot_registry.json` file in the application's working directory (`userdata`).
+3. **streaming:** file writing and reading are carried out in 64 kb chunks via grpc streams (`put` and `get` requests), which eliminates grpc limitations on the maximum message size.
+4. **file viewing:** playback and preview of media files (images, audio, video, text) are supported directly in the interface after their decryption.
 
-## Установка и запуск
+## installation and startup
 
-### 1. Установка зависимостей
+### 1. installing dependencies
 
-Требуется Node.js v18+:
+requires node.js v18+:
 
 ```bash
 npm install
 ```
 
-### 2. Запуск в режиме разработки
+### 2. running in development mode
 
-Запустите сервер Vite:
+start the vite server:
 
 ```bash
 npm run dev
 ```
 
-В другом терминале запустите Electron:
+in another terminal, start electron:
 
 ```bash
 npm run electron:start
 ```
 
-### 3. Тестирование
+### 3. testing
 
-Запуск тестов Vitest:
+running vitest tests:
 
 ```bash
 npm test
 ```
 
-### 4. Сборка приложения
+### 4. building the application
 
-Сборка оптимизированных фронтенд-ресурсов:
+building optimized frontend resources:
 
 ```bash
 npm run build
 ```
 
-Сборка готового дистрибутива приложения для текущей платформы (electron-builder):
+building the ready-to-use application distribution for the current platform (electron-builder):
 
 ```bash
 npm run dist
