@@ -281,12 +281,13 @@ export default function App() {
     }
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
+      await window.electronAPI.authorizeDrop(file);
       const filePath = file.path;
       const fileName = file.name;
       const mimeType = detectMimeType(fileName);
