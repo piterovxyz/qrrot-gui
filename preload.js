@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   put: (args) => ipcRenderer.invoke('grpc:put', args),
   getSave: (args) => ipcRenderer.invoke('grpc:get:save', args),
   getMemory: (args) => ipcRenderer.invoke('grpc:get:memory', args),
+  getKeys: () => ipcRenderer.invoke('grpc:keys'),
 
   getRegistry: () => ipcRenderer.invoke('registry:list'),
   addRegistry: (entry) => ipcRenderer.invoke('registry:add', entry),

@@ -1,6 +1,11 @@
 {
   "name": "qrrot-gui",
-  "version": "1.0.0",
+  "author": {
+    "email": "me@piterov.xyz",
+    "name": "Artur Piterov",
+    "url": "https://piterov.xyz"
+  },
+  "version": "1.2.1",
   "description": "gRPC desktop client for qrrot database",
   "main": "main.js",
   "type": "commonjs",
