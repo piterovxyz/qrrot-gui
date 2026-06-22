@@ -161,7 +161,7 @@ ipcMain.handle('grpc:connect', async (event, address) => {
 
     grpcClient = new qrrotProto.QrrotService(
       address,
-      grpc.credentials.createInsecure()
+      grpc.credentials.createSsl()
     );
     currentGrpcAddress = address;
 
