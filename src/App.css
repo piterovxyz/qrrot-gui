@@ -475,3 +475,212 @@ body, html, #root {
   color: var(--violet);
   filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.3));
 }
+
+.uploader-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(7, 7, 9, 0.85);
+  backdrop-filter: blur(15px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.uploader-card {
+  width: 100%;
+  max-width: 550px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.uploader-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.uploader-title h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  background: linear-gradient(to right, var(--cyan), var(--violet));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.01);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.drop-zone:hover, .drop-zone.drag-active {
+  border-color: var(--cyan);
+  background: rgba(6, 182, 212, 0.04);
+}
+
+.drop-zone-icon {
+  font-size: 2.5rem;
+  color: var(--cyan);
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: lowercase;
+}
+
+.form-group input, .form-group select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--cyan);
+}
+
+.idle-screen {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.idle-icon {
+  font-size: 4rem;
+  background: linear-gradient(to bottom, var(--cyan), var(--violet));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 15px rgba(6, 182, 212, 0.2));
+  animation: float 4s ease-in-out infinite;
+}
+
+.idle-screen p {
+  font-size: 0.9rem;
+}
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.spin-wheel {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.05);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, var(--cyan), var(--violet));
+  transition: width 0.1s ease-out;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+.console-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 140px;
+  background: rgba(7, 7, 9, 0.9);
+  border-top: 1px solid var(--border-light);
+  font-family: var(--font-mono);
+  padding: 12px 20px;
+  overflow-y: auto;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: text;
+}
+
+.console-line {
+  font-size: 0.75rem;
+  display: flex;
+  gap: 8px;
+}
+
+.console-time {
+  color: var(--text-muted);
+}
+
+.console-info {
+  color: var(--cyan);
+}
+
+.console-error {
+  color: var(--red);
+}
+
+.console-success {
+  color: var(--green);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
