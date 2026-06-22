@@ -27,7 +27,7 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [logs, setLogs] = useState([]);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
-  const consoleEndRef = useRef(null);
+  const logsContainerRef = useRef(null);
 
   const addLog = (text, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -35,8 +35,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (consoleExpanded && consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
     }
   }, [logs, consoleExpanded]);
 
@@ -201,9 +201,10 @@ export default function App() {
     if (!selectedKey) return;
 
     try {
+      const safePath = selectedKey.key.replace(/[<>/\\|?*":]/g, '_');
       const saveDialog = await window.electronAPI.saveFileDialog({
         title: 'save decrypted file',
-        defaultPath: selectedKey.key,
+        defaultPath: safePath,
       });
       if (saveDialog.canceled || !saveDialog.filePath) return;
 
@@ -710,7 +711,7 @@ export default function App() {
               </div>
            </div>
 
-           <div className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs flex flex-col gap-1 select-text scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+           <div ref={logsContainerRef} className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs flex flex-col gap-1 select-text scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
              {logs.map((log, idx) => (
                <div key={idx} className="flex gap-2">
                  <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
@@ -723,7 +724,6 @@ export default function App() {
                  </span>
                </div>
              ))}
-             <div ref={consoleEndRef} />
            </div>
         </motion.div>
 

@@ -45,7 +45,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     frame: false,
-    titleBarStyle: 'hidden',
+    titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 18 },
     vibrancy: 'under-window',
     visualEffectState: 'active',
@@ -66,15 +66,18 @@ function createWindow() {
 }
 
 if (app) {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'qrrot-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+  ]);
+
   app.whenReady().then(() => {
     protocol.handle('qrrot-media', async (request) => {
-    const rawUrl = request.url.slice('qrrot-media://'.length);
-    const decodedUrl = decodeURIComponent(rawUrl);
-    // the url will be something like stream/key?token=xxx
-    if (decodedUrl.startsWith('stream/')) {
       const urlObj = new URL(request.url);
-      const key = urlObj.pathname.replace('//stream/', '');
-      const token = urlObj.searchParams.get('token');
+      
+      // the url will be something like qrrot-media://stream/key?token=xxx
+      if (urlObj.pathname.startsWith('//stream/')) {
+        const key = urlObj.pathname.replace('//stream/', '');
+        const token = urlObj.searchParams.get('token');
 
       if (!grpcClient) {
         return new Response('Not connected', { status: 500 });
@@ -150,27 +153,7 @@ if (app) {
       return responsePromise;
     }
 
-    const tempDir = app.getPath('temp');
-    const userDataDir = app.getPath('userData');
-
-    // Convert file URL string to actual path if needed, or use decodedUrl directly
-    let absolutePath = path.resolve(decodedUrl);
-
-    const isPathInsideDir = (dir, targetPath) => {
-      const relativePath = path.relative(dir, targetPath);
-      return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
-    };
-
-    if (
-      isPathInsideDir(tempDir, absolutePath) ||
-      isPathInsideDir(userDataDir, absolutePath) ||
-      absolutePath === tempDir || absolutePath === userDataDir
-    ) {
-      return net.fetch(url.pathToFileURL(absolutePath).toString());
-    }
-
-    console.error(`Blocked unauthorized file access via protocol handler: ${absolutePath}`);
-    return new Response('Forbidden', { status: 403 });
+    return new Response('Not found', { status: 404 });
   });
 
   createWindow();
@@ -198,8 +181,12 @@ ipcMain.handle('grpc:connect', async (event, address) => {
       }
     }
 
+    const protoPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'proto/qrrot.proto') 
+      : path.join(__dirname, 'proto/qrrot.proto');
+
     const packageDefinition = protoLoader.loadSync(
-      path.join(__dirname, 'proto/qrrot.proto'),
+      protoPath,
       {
         keepCase: true,
         longs: String,
@@ -275,7 +262,10 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
 
   return new Promise((resolve, reject) => {
     const call = grpcClient.put((err, res) => {
-      if (err) return reject(err);
+      if (err) {
+        if (readStream) readStream.destroy();
+        return reject(err);
+      }
       resolve({ status: res.status, size: totalSize });
     });
 
@@ -305,6 +295,11 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
       call.destroy(err);
       reject(err);
     });
+
+    call.on('error', (err) => {
+      readStream.destroy();
+      reject(err);
+    });
   });
 });
 
@@ -328,6 +323,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
         mimeType = res.metadata.mime_type;
         writeStream = fs.createWriteStream(savePath);
         writeStream.on('error', (err) => {
+          call.cancel();
           reject(err);
         });
       } else if (res.chunk) {

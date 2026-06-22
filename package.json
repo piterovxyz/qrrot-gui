@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron:start": "electron .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dist": "vite build && electron-builder"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.10.9",
@@ -27,6 +28,7 @@
     "autoprefixer": "^10.5.0",
     "clsx": "^2.1.1",
     "electron": "42.4.1",
+    "electron-builder": "^24.13.3",
     "jest": "^30.4.2",
     "jsdom": "^29.1.1",
     "lucide-react": "^1.21.0",
@@ -35,6 +37,32 @@
     "tailwindcss": "^3.4.19",
     "vite": "8.0.16",
     "vitest": "^4.1.9"
+  },
+  "build": {
+    "appId": "com.qrrot.gui",
+    "productName": "qrrot-gui",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json",
+      "proto/**/*"
+    ],
+    "asarUnpack": [
+      "proto/**"
+    ],
+    "mac": {
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
   },
   "overrides": {
     "yauzl": "^3.3.1"
