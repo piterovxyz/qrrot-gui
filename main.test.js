@@ -1,96 +1,83 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
 
-// Using vi.mock with an inline factory works in vitest if we are using ES modules, but main is CJS.
-// Let's use Vitest's recommended way for CJS: vi.mock + vi.importActual / static object
-const electronMock = {
+jest.mock('electron', () => ({
   app: {
-    getPath: vi.fn(() => '/mock/path'),
-    whenReady: vi.fn(() => Promise.resolve()),
-    on: vi.fn(),
-    isPackaged: false,
+    getPath: jest.fn(() => '/mock/path'),
+    whenReady: jest.fn(() => Promise.resolve()),
+    on: jest.fn(),
+    isPackaged: false
   },
-  BrowserWindow: Object.assign(vi.fn(() => ({
-    loadURL: vi.fn(),
-    loadFile: vi.fn(),
-    webContents: {
-      openDevTools: vi.fn(),
-      send: vi.fn(),
-    },
+  BrowserWindow: Object.assign(jest.fn(() => ({
+    loadURL: jest.fn(),
+    loadFile: jest.fn(),
+    webContents: { openDevTools: jest.fn(), send: jest.fn() }
   })), {
-    getAllWindows: vi.fn(() => []),
+    getAllWindows: jest.fn(() => [])
   }),
-  ipcMain: {
-    handle: vi.fn(),
-  },
-  protocol: {
-    handle: vi.fn(),
-  },
-  net: {
-    fetch: vi.fn(),
-  },
-  dialog: {
-    showOpenDialog: vi.fn(),
-    showSaveDialog: vi.fn(),
-  },
-};
-vi.mock('electron', () => electronMock);
-
-vi.mock('fs', () => ({
-  default: {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    existsSync: vi.fn(),
-    statSync: vi.fn(),
-    createReadStream: vi.fn(),
-    createWriteStream: vi.fn(),
-  },
-  writeFileSync: vi.fn(),
-  readFileSync: vi.fn(),
-  existsSync: vi.fn(),
-  statSync: vi.fn(),
-  createReadStream: vi.fn(),
-  createWriteStream: vi.fn(),
+  ipcMain: { handle: jest.fn() },
+  protocol: { handle: jest.fn() },
+  net: { fetch: jest.fn() },
+  dialog: { showOpenDialog: jest.fn(), showSaveDialog: jest.fn() }
 }));
 
-vi.mock('@grpc/grpc-js', () => ({
-  connectivityState: {
-    TRANSIENT_FAILURE: 'TRANSIENT_FAILURE',
-    SHUTDOWN: 'SHUTDOWN'
-  },
-  credentials: {
-    createInsecure: vi.fn()
-  },
-  loadPackageDefinition: vi.fn(() => ({
-    qrrot: {
-      v1: {
-        QrrotService: vi.fn()
-      }
-    }
-  }))
-}));
+jest.mock('fs', () => {
+  return {
+    ...jest.requireActual('fs'),
+    existsSync: jest.fn(),
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn()
+  };
+});
 
-vi.mock('@grpc/proto-loader', () => ({
-  loadSync: vi.fn()
-}));
+beforeAll(() => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+});
 
+afterAll(() => {
+  console.error.mockRestore();
+});
 
-describe('writeRegistry', () => {
+process.env.NODE_ENV = 'test';
+const main = require('./main.js');
+
+describe('readRegistry edge cases', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    jest.clearAllMocks();
   });
 
-  it('should catch and log error when fs.writeFileSync throws', async () => {
-    process.env.NODE_ENV = 'test';
-    // Use dynamic import instead of require
-    const mainModule = await import('./main.js');
-
-    fs.writeFileSync.mockImplementation(() => {
-      throw new Error('Disk full');
+  it('should return an empty array when fs.readFileSync throws an error', () => {
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockImplementation(() => {
+      throw new Error('Mock read error');
     });
-    mainModule.writeRegistry({});
-    expect(console.error).toHaveBeenCalledWith('failed to write registry:', expect.any(Error));
+
+    const result = main.readRegistry();
+    expect(result).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith('failed to read registry:', expect.any(Error));
+  });
+
+  it('should return an empty array when JSON.parse throws an error', () => {
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockReturnValue('invalid-json');
+
+    const result = main.readRegistry();
+    expect(result).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith('failed to read registry:', expect.any(SyntaxError));
+  });
+
+  it('should return an empty array when file does not exist', () => {
+    fs.existsSync.mockReturnValue(false);
+
+    const result = main.readRegistry();
+    expect(result).toEqual([]);
+  });
+
+  it('should return parsed data when valid JSON is read', () => {
+    const mockData = [{ key: 'test', value: 'data' }];
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockReturnValue(JSON.stringify(mockData));
+
+    const result = main.readRegistry();
+    expect(result).toEqual(mockData);
   });
 });

@@ -418,4 +418,7 @@ ipcMain.handle('dialog:save', async (event, options) => {
   }
   return result;
 });
+
+if (process.env.NODE_ENV === 'test') {
+  module.exports = { readRegistry, writeRegistry };
 }
