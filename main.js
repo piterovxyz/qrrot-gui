@@ -68,54 +68,74 @@ app.whenReady().then(() => {
         return new Response('Not connected', { status: 500 });
       }
 
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-
-      const call = grpcClient.get({ key, token });
-
       // We wait for the first chunk to arrive before we return the response
       // so we can set the content type correctly.
       let responseMimeType = 'application/octet-stream';
+      let firstChunkReceived = false;
+      let resolveResponse;
 
-      return new Promise((resolve, reject) => {
-        let firstChunkReceived = false;
+      const responsePromise = new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
 
-        call.on('data', async (res) => {
-          if (res.metadata) {
-            responseMimeType = res.metadata.mime_type;
-          } else if (res.chunk) {
+      const readable = new ReadableStream({
+        start(controller) {
+          const call = grpcClient.get({ key, token });
+          this.call = call;
+
+          call.on('data', (res) => {
+            if (res.metadata) {
+              responseMimeType = res.metadata.mime_type;
+            } else if (res.chunk) {
+              if (!firstChunkReceived) {
+                firstChunkReceived = true;
+                resolveResponse(new Response(readable, {
+                  headers: { 'Content-Type': responseMimeType }
+                }));
+              }
+
+              controller.enqueue(res.chunk);
+
+              // Apply backpressure if the queue is getting full
+              if (controller.desiredSize <= 0) {
+                call.pause();
+              }
+            }
+          });
+
+          call.on('end', () => {
             if (!firstChunkReceived) {
-              firstChunkReceived = true;
-              resolve(new Response(readable, {
+              // Handle empty files or missing data gracefully
+              resolveResponse(new Response(readable, {
                 headers: { 'Content-Type': responseMimeType }
               }));
             }
-            try {
-              await writer.write(res.chunk);
-            } catch (e) {
-              console.error('error writing to stream', e);
+            controller.close();
+          });
+
+          call.on('error', (err) => {
+            console.error('grpc get error:', err);
+            if (!firstChunkReceived) {
+              resolveResponse(new Response('Error', { status: 500 }));
             }
+            controller.error(err);
+          });
+        },
+        pull(controller) {
+          // Resume reading when the consumer is ready for more data
+          if (this.call) {
+            this.call.resume();
           }
-        });
-
-        call.on('end', () => {
-          if (!firstChunkReceived) {
-            // Handle empty files or missing data gracefully
-            resolve(new Response(readable, {
-              headers: { 'Content-Type': responseMimeType }
-            }));
+        },
+        cancel() {
+          // Cancel the gRPC call if the stream is aborted
+          if (this.call) {
+            this.call.cancel();
           }
-          writer.close();
-        });
-
-        call.on('error', (err) => {
-          console.error('grpc get error:', err);
-          if (!firstChunkReceived) {
-            resolve(new Response('Error', { status: 500 }));
-          }
-          writer.abort(err);
-        });
+        }
       });
+
+      return responsePromise;
     }
 
     return net.fetch(url.pathToFileURL(decodedUrl).toString());
