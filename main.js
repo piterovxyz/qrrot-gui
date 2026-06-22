@@ -23,9 +23,9 @@ function readRegistry() {
   }
 }
 
-function writeRegistry(data) {
+async function writeRegistry(data) {
   try {
-    fs.writeFileSync(registryPath, JSON.stringify(data, null, 2), 'utf8');
+    await fs.promises.writeFile(registryPath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('failed to write registry:', err);
   }
@@ -327,14 +327,14 @@ ipcMain.handle('registry:add', async (event, entry) => {
   } else {
     registry.push({ ...entry, dateAdded: new Date().toISOString() });
   }
-  writeRegistry(registry);
+  await writeRegistry(registry);
   return registry;
 });
 
 ipcMain.handle('registry:remove', async (event, key) => {
   const registry = readRegistry();
   const updated = registry.filter(e => e.key !== key);
-  writeRegistry(updated);
+  await writeRegistry(updated);
   return updated;
 });
 
