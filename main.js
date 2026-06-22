@@ -10,22 +10,22 @@ let grpcClient = null;
 
 const registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
 
-function readRegistry() {
+async function readRegistry() {
   try {
-    if (!fs.existsSync(registryPath)) {
-      return [];
-    }
-    const data = fs.readFileSync(registryPath, 'utf8');
+    const data = await fs.promises.readFile(registryPath, 'utf8');
     return JSON.parse(data);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
     console.error('failed to read registry:', err);
     return [];
   }
 }
 
-function writeRegistry(data) {
+async function writeRegistry(data) {
   try {
-    fs.writeFileSync(registryPath, JSON.stringify(data, null, 2), 'utf8');
+    await fs.promises.writeFile(registryPath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('failed to write registry:', err);
   }
@@ -316,25 +316,25 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token }) => {
 });
 
 ipcMain.handle('registry:list', async () => {
-  return readRegistry();
+  return await readRegistry();
 });
 
 ipcMain.handle('registry:add', async (event, entry) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const index = registry.findIndex(e => e.key === entry.key);
   if (index >= 0) {
     registry[index] = { ...registry[index], ...entry, dateUpdated: new Date().toISOString() };
   } else {
     registry.push({ ...entry, dateAdded: new Date().toISOString() });
   }
-  writeRegistry(registry);
+  await writeRegistry(registry);
   return registry;
 });
 
 ipcMain.handle('registry:remove', async (event, key) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const updated = registry.filter(e => e.key !== key);
-  writeRegistry(updated);
+  await writeRegistry(updated);
   return updated;
 });
 
