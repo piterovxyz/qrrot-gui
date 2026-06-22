@@ -38,5 +38,9 @@
   },
   "overrides": {
     "yauzl": "^3.3.1"
+  },
+  "allowScripts": {
+    "protobufjs@7.6.4": true,
+    "unrs-resolver@1.12.2": true
   }
 }
