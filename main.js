@@ -7,6 +7,7 @@ const protoLoader = require('@grpc/proto-loader');
 
 let mainWindow;
 let grpcClient = null;
+const allowedSavePaths = new Set();
 
 let registryPath;
 try {
@@ -15,22 +16,22 @@ try {
   registryPath = path.join('/mock/path', 'qrrot_registry.json');
 }
 
-function readRegistry() {
+async function readRegistry() {
   try {
-    if (!fs.existsSync(registryPath)) {
-      return [];
-    }
-    const data = fs.readFileSync(registryPath, 'utf8');
+    const data = await fs.promises.readFile(registryPath, 'utf8');
     return JSON.parse(data);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
     console.error('failed to read registry:', err);
     return [];
   }
 }
 
-function writeRegistry(data) {
+async function writeRegistry(data) {
   try {
-    fs.writeFileSync(registryPath, JSON.stringify(data, null, 2), 'utf8');
+    await fs.promises.writeFile(registryPath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('failed to write registry:', err);
   }
@@ -43,11 +44,15 @@ if (process.env.NODE_ENV === 'test') {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 750,
+    width: 1200,
+    height: 800,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: 'hiddenInset',
+    frame: false,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 20, y: 18 },
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -79,57 +84,97 @@ if (app) {
         return new Response('Not connected', { status: 500 });
       }
 
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-
-      const call = grpcClient.get({ key, token });
-
       // We wait for the first chunk to arrive before we return the response
       // so we can set the content type correctly.
       let responseMimeType = 'application/octet-stream';
+      let firstChunkReceived = false;
+      let resolveResponse;
 
-      return new Promise((resolve, reject) => {
-        let firstChunkReceived = false;
+      const responsePromise = new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
 
-        call.on('data', async (res) => {
-          if (res.metadata) {
-            responseMimeType = res.metadata.mime_type;
-          } else if (res.chunk) {
+      const readable = new ReadableStream({
+        start(controller) {
+          const call = grpcClient.get({ key, token });
+          this.call = call;
+
+          call.on('data', (res) => {
+            if (res.metadata) {
+              responseMimeType = res.metadata.mime_type;
+            } else if (res.chunk) {
+              if (!firstChunkReceived) {
+                firstChunkReceived = true;
+                resolveResponse(new Response(readable, {
+                  headers: { 'Content-Type': responseMimeType }
+                }));
+              }
+
+              controller.enqueue(res.chunk);
+
+              // Apply backpressure if the queue is getting full
+              if (controller.desiredSize <= 0) {
+                call.pause();
+              }
+            }
+          });
+
+          call.on('end', () => {
             if (!firstChunkReceived) {
-              firstChunkReceived = true;
-              resolve(new Response(readable, {
+              // Handle empty files or missing data gracefully
+              resolveResponse(new Response(readable, {
                 headers: { 'Content-Type': responseMimeType }
               }));
             }
-            try {
-              await writer.write(res.chunk);
-            } catch (e) {
-              console.error('error writing to stream', e);
+            controller.close();
+          });
+
+          call.on('error', (err) => {
+            console.error('grpc get error:', err);
+            if (!firstChunkReceived) {
+              resolveResponse(new Response('Error', { status: 500 }));
             }
+            controller.error(err);
+          });
+        },
+        pull(controller) {
+          // Resume reading when the consumer is ready for more data
+          if (this.call) {
+            this.call.resume();
           }
-        });
-
-        call.on('end', () => {
-          if (!firstChunkReceived) {
-            // Handle empty files or missing data gracefully
-            resolve(new Response(readable, {
-              headers: { 'Content-Type': responseMimeType }
-            }));
+        },
+        cancel() {
+          // Cancel the gRPC call if the stream is aborted
+          if (this.call) {
+            this.call.cancel();
           }
-          writer.close();
-        });
-
-        call.on('error', (err) => {
-          console.error('grpc get error:', err);
-          if (!firstChunkReceived) {
-            resolve(new Response('Error', { status: 500 }));
-          }
-          writer.abort(err);
-        });
+        }
       });
+
+      return responsePromise;
     }
 
-    return net.fetch(url.pathToFileURL(decodedUrl).toString());
+    const tempDir = app.getPath('temp');
+    const userDataDir = app.getPath('userData');
+
+    // Convert file URL string to actual path if needed, or use decodedUrl directly
+    let absolutePath = path.resolve(decodedUrl);
+
+    const isPathInsideDir = (dir, targetPath) => {
+      const relativePath = path.relative(dir, targetPath);
+      return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+    };
+
+    if (
+      isPathInsideDir(tempDir, absolutePath) ||
+      isPathInsideDir(userDataDir, absolutePath) ||
+      absolutePath === tempDir || absolutePath === userDataDir
+    ) {
+      return net.fetch(url.pathToFileURL(absolutePath).toString());
+    }
+
+    console.error(`Blocked unauthorized file access via protocol handler: ${absolutePath}`);
+    return new Response('Forbidden', { status: 403 });
   });
 
   createWindow();
@@ -174,7 +219,7 @@ ipcMain.handle('grpc:connect', async (event, address) => {
 
     grpcClient = new qrrotProto.QrrotService(
       address,
-      grpc.credentials.createInsecure()
+      grpc.credentials.createSsl()
     );
     currentGrpcAddress = address;
 
@@ -208,13 +253,19 @@ ipcMain.handle('grpc:del', async (event, key) => {
 });
 
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
+  if (!grpcClient) throw new Error('not connected to grpc server');
+
+  let fileStats;
+  try {
+    fileStats = await fs.promises.stat(filePath);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('file does not exist');
+    throw err;
+  }
+
+  const totalSize = fileStats.size;
+
   return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    if (!fs.existsSync(filePath)) return reject(new Error('file does not exist'));
-
-    const fileStats = fs.statSync(filePath);
-    const totalSize = fileStats.size;
-
     const call = grpcClient.put((err, res) => {
       if (err) return reject(err);
       resolve({ status: res.status, size: totalSize });
@@ -252,6 +303,11 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
 ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
+    if (!allowedSavePaths.has(savePath)) {
+      return reject(new Error('Unauthorized save path'));
+    }
+
+    allowedSavePaths.delete(savePath);
 
     const call = grpcClient.get({ key, token });
     let writeStream = null;
@@ -329,25 +385,25 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token }) => {
 });
 
 ipcMain.handle('registry:list', async () => {
-  return readRegistry();
+  return await readRegistry();
 });
 
 ipcMain.handle('registry:add', async (event, entry) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const index = registry.findIndex(e => e.key === entry.key);
   if (index >= 0) {
     registry[index] = { ...registry[index], ...entry, dateUpdated: new Date().toISOString() };
   } else {
     registry.push({ ...entry, dateAdded: new Date().toISOString() });
   }
-  writeRegistry(registry);
+  await writeRegistry(registry);
   return registry;
 });
 
 ipcMain.handle('registry:remove', async (event, key) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const updated = registry.filter(e => e.key !== key);
-  writeRegistry(updated);
+  await writeRegistry(updated);
   return updated;
 });
 
@@ -356,6 +412,10 @@ ipcMain.handle('dialog:open', async (event, options) => {
 });
 
 ipcMain.handle('dialog:save', async (event, options) => {
-  return dialog.showSaveDialog(mainWindow, options);
+  const result = await dialog.showSaveDialog(mainWindow, options);
+  if (!result.canceled && result.filePath) {
+    allowedSavePaths.add(result.filePath);
+  }
+  return result;
 });
 }
