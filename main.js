@@ -89,8 +89,8 @@ if (app) {
     protocol.handle('qrrot-media', async (request) => {
       const urlObj = new URL(request.url);
       
-      if (urlObj.pathname.startsWith('//stream/')) {
-        const key = urlObj.pathname.replace('//stream/', '');
+      if (urlObj.host === 'stream') {
+        const key = decodeURIComponent(urlObj.pathname.slice(1));
         const token = urlObj.searchParams.get('token');
 
       if (!grpcClient) {
@@ -470,7 +470,7 @@ ipcMain.handle('dialog:open', async (event, options) => {
 ipcMain.handle('dialog:save', async (event, options) => {
   const res = await dialog.showSaveDialog(mainWindow, options);
   if (!res.canceled && res.filePath) {
-    allowedFilePaths.add(res.filePath);
+    allowedSavePaths.add(res.filePath);
   }
   return res;
 });
