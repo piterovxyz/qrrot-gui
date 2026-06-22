@@ -9,6 +9,7 @@ service QrrotService {
   rpc Put (stream PutRequest) returns (PutResponse);
   rpc Del (DelRequest) returns (DelResponse);
   rpc Exists (ExistsRequest) returns (ExistsResponse);
+  rpc Keys (KeysRequest) returns (stream KeysResponse);
 }
 
 message Metadata {
@@ -54,4 +55,17 @@ message ExistsRequest {
 
 message ExistsResponse {
   bool exists = 1;
+}
+
+message KeysRequest {
+}
+
+message KeyInfo {
+  string key = 1;
+  uint64 size = 2;
+  string mime_type = 3;
+}
+
+message KeysResponse {
+  repeated KeyInfo keys = 1;
 }

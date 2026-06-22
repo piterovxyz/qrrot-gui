@@ -21,7 +21,7 @@ const itemVariants = {
 };
 
 export default function App() {
-  const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:50051');
+  const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:60945');
   const [connected, setConnected] = useState(false);
   const [registry, setRegistry] = useState([]);
   const [connectionError, setConnectionError] = useState('');
@@ -82,7 +82,15 @@ export default function App() {
       if (res.success) {
         setConnected(true);
         addLog(res.cached ? 'using cached grpc connection' : 'connected to grpc server', 'success');
-        fetchRegistry();
+        try {
+          addLog('fetching keys from server...', 'info');
+          const keys = await window.electronAPI.getKeys();
+          setRegistry(keys);
+          addLog(`successfully loaded ${keys.length} keys from server`, 'success');
+        } catch (err) {
+          addLog(`failed to load keys from server: ${err.message}, falling back to local registry`, 'error');
+          fetchRegistry();
+        }
       } else {
         setConnected(false);
         setConnectionError(`Connection failed: ${res.error}`);
@@ -108,7 +116,7 @@ export default function App() {
 
       const type = detectViewerType(keyEntry.mimeType);
 
-      if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text')) {
+      if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text' || type === 'pdf')) {
          const res = await window.electronAPI.getMemory({ key: keyEntry.key, token: currentToken });
          let url = '';
          let textContent = '';
@@ -117,7 +125,7 @@ export default function App() {
            if (type === 'text') {
                const decoder = new TextDecoder('utf-8');
                textContent = decoder.decode(res.data);
-           } else if (type === 'image') {
+           } else if (type === 'image' || type === 'pdf') {
                const blob = new Blob([res.data], { type: res.mimeType });
                url = URL.createObjectURL(blob);
            }
@@ -305,6 +313,28 @@ export default function App() {
     );
   }, [registry, searchQuery]);
 
+  const [visibleCount, setVisibleCount] = useState(100);
+
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [searchQuery, registry]);
+
+  const displayedRegistry = useMemo(() => {
+    return filteredRegistry.slice(0, visibleCount);
+  }, [filteredRegistry, visibleCount]);
+
+  const handleScroll = useCallback((e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 150) {
+      setVisibleCount(prev => {
+        if (prev < filteredRegistry.length) {
+          return Math.min(prev + 100, filteredRegistry.length);
+        }
+        return prev;
+      });
+    }
+  }, [filteredRegistry.length]);
+
   return (
     <div className="flex h-screen w-screen bg-m3-surface text-m3-on-surface font-sans overflow-hidden select-none" onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}>
       <AnimatePresence mode="wait">
@@ -339,7 +369,7 @@ export default function App() {
                     className="bg-m3-surface-container-high border border-m3-outline-variant/30 rounded-full text-m3-on-surface px-5 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-m3-primary focus:border-transparent transition-all shadow-inner"
                     value={grpcAddress}
                     onChange={(e) => setGrpcAddress(e.target.value)}
-                    placeholder="localhost:50051"
+                    placeholder="localhost:60945"
                   />
                 </div>
 
@@ -403,7 +433,7 @@ export default function App() {
                     className="flex-1 bg-transparent border-none text-m3-on-surface px-3 py-1.5 text-xs font-mono outline-none"
                     value={grpcAddress}
                     onChange={(e) => setGrpcAddress(e.target.value)}
-                    placeholder="127.0.0.1:50051"
+                    placeholder="127.0.0.1:60945"
                   />
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -445,9 +475,10 @@ export default function App() {
                 variants={containerVariants}
                 initial="hidden"
                 animate="show"
+                onScroll={handleScroll}
                 className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-1 mt-1 scrollbar-thin"
               >
-                {filteredRegistry.map(item => {
+                {displayedRegistry.map(item => {
                   const isActive = selectedKey?.key === item.key;
                   return (
                     <motion.div
@@ -478,6 +509,11 @@ export default function App() {
                     </motion.div>
                   );
                 })}
+                {filteredRegistry.length > displayedRegistry.length && (
+                  <div className="text-center py-3 text-[11px] text-m3-on-surface-variant/60 font-mono">
+                    showing {displayedRegistry.length} of {filteredRegistry.length} keys...
+                  </div>
+                )}
                 {filteredRegistry.length === 0 && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 text-m3-on-surface-variant text-xs font-medium">
                     No items found
@@ -620,6 +656,11 @@ export default function App() {
                             </div>
                             <audio src={viewerData.url} controls autoPlay className="w-full outline-none" />
                           </div>
+                        </div>
+                      )}
+                      {viewerData.type === 'pdf' && (
+                        <div className="flex-1 flex items-center justify-center overflow-hidden relative p-4 bg-m3-surface-container-high">
+                          <embed src={viewerData.url} type="application/pdf" className="w-full h-full rounded-xl shadow-2xl" />
                         </div>
                       )}
                       {viewerData.type === 'binary' && (

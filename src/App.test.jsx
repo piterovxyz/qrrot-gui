@@ -18,7 +18,8 @@ const mockElectronAPI = {
   getSave: vi.fn(),
   openFileDialog: vi.fn(),
   put: vi.fn(),
-  addRegistry: vi.fn()
+  addRegistry: vi.fn(),
+  getKeys: vi.fn()
 };
 
 beforeEach(() => {
@@ -26,6 +27,11 @@ beforeEach(() => {
 
   // Setup standard mock responses
   mockElectronAPI.getRegistry.mockResolvedValue([
+    { key: 'test1', mimeType: 'text/plain', size: 100 },
+    { key: 'test2', mimeType: 'image/png', size: 2048 },
+    { key: 'test3', mimeType: 'video/mp4', size: 1048576 } // 1MB
+  ]);
+  mockElectronAPI.getKeys.mockResolvedValue([
     { key: 'test1', mimeType: 'text/plain', size: 100 },
     { key: 'test2', mimeType: 'image/png', size: 2048 },
     { key: 'test3', mimeType: 'video/mp4', size: 1048576 } // 1MB
@@ -81,12 +87,12 @@ describe('App Component', () => {
 
     // Check loading of registry
     await waitFor(() => {
-      expect(mockElectronAPI.getRegistry).toHaveBeenCalled();
+      expect(mockElectronAPI.getKeys).toHaveBeenCalled();
     });
 
     // Check connecting
     await waitFor(() => {
-      expect(mockElectronAPI.connect).toHaveBeenCalledWith('127.0.0.1:50051');
+      expect(mockElectronAPI.connect).toHaveBeenCalledWith('127.0.0.1:60945');
     });
 
     // Check items render
