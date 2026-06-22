@@ -33,11 +33,15 @@ function writeRegistry(data) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 750,
+    width: 1200,
+    height: 800,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: 'hiddenInset',
+    frame: false,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 20, y: 18 },
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

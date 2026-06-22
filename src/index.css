@@ -29,3 +29,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* App Region utilities for Electron */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag-region {
+  -webkit-app-region: no-drag;
+}
