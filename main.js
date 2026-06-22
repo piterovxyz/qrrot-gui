@@ -7,37 +7,48 @@ const protoLoader = require('@grpc/proto-loader');
 
 let mainWindow;
 let grpcClient = null;
+const allowedSavePaths = new Set();
 
-const registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
+let registryPath;
+try {
+  registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
+} catch (e) {
+  registryPath = path.join('/mock/path', 'qrrot_registry.json');
+}
 
-function readRegistry() {
+async function readRegistry() {
   try {
-    if (!fs.existsSync(registryPath)) {
-      return [];
-    }
-    const data = fs.readFileSync(registryPath, 'utf8');
+    const data = await fs.promises.readFile(registryPath, 'utf8');
     return JSON.parse(data);
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
     console.error('failed to read registry:', err);
     return [];
   }
 }
 
-function writeRegistry(data) {
+async function writeRegistry(data) {
   try {
-    fs.writeFileSync(registryPath, JSON.stringify(data, null, 2), 'utf8');
+    await fs.promises.writeFile(registryPath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('failed to write registry:', err);
   }
 }
 
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 750,
+    width: 1200,
+    height: 800,
     minWidth: 800,
     minHeight: 600,
+    frame: false,
     titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 20, y: 18 },
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -54,86 +65,113 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  protocol.handle('qrrot-media', async (request) => {
-    const rawUrl = request.url.slice('qrrot-media://'.length);
-    const decodedUrl = decodeURIComponent(rawUrl);
-    // the url will be something like stream/key?token=xxx
-    if (decodedUrl.startsWith('stream/')) {
+if (app) {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'qrrot-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+  ]);
+
+  app.whenReady().then(() => {
+    protocol.handle('qrrot-media', async (request) => {
       const urlObj = new URL(request.url);
-      const key = urlObj.pathname.replace('//stream/', '');
-      const token = urlObj.searchParams.get('token');
+      
+      // the url will be something like qrrot-media://stream/key?token=xxx
+      if (urlObj.pathname.startsWith('//stream/')) {
+        const key = urlObj.pathname.replace('//stream/', '');
+        const token = urlObj.searchParams.get('token');
 
       if (!grpcClient) {
         return new Response('Not connected', { status: 500 });
       }
 
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-
-      const call = grpcClient.get({ key, token });
-
       // We wait for the first chunk to arrive before we return the response
       // so we can set the content type correctly.
       let responseMimeType = 'application/octet-stream';
+      let firstChunkReceived = false;
+      let resolveResponse;
 
-      return new Promise((resolve, reject) => {
-        let firstChunkReceived = false;
+      const responsePromise = new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
 
-        call.on('data', async (res) => {
-          if (res.metadata) {
-            responseMimeType = res.metadata.mime_type;
-          } else if (res.chunk) {
+      const readable = new ReadableStream({
+        start(controller) {
+          const call = grpcClient.get({ key, token });
+          this.call = call;
+
+          call.on('data', (res) => {
+            if (res.metadata) {
+              responseMimeType = res.metadata.mime_type;
+            } else if (res.chunk) {
+              if (!firstChunkReceived) {
+                firstChunkReceived = true;
+                resolveResponse(new Response(readable, {
+                  headers: { 'Content-Type': responseMimeType }
+                }));
+              }
+
+              controller.enqueue(res.chunk);
+
+              // Apply backpressure if the queue is getting full
+              if (controller.desiredSize <= 0) {
+                call.pause();
+              }
+            }
+          });
+
+          call.on('end', () => {
             if (!firstChunkReceived) {
-              firstChunkReceived = true;
-              resolve(new Response(readable, {
+              // Handle empty files or missing data gracefully
+              resolveResponse(new Response(readable, {
                 headers: { 'Content-Type': responseMimeType }
               }));
             }
-            try {
-              await writer.write(res.chunk);
-            } catch (e) {
-              console.error('error writing to stream', e);
+            controller.close();
+          });
+
+          call.on('error', (err) => {
+            console.error('grpc get error:', err);
+            if (!firstChunkReceived) {
+              resolveResponse(new Response('Error', { status: 500 }));
             }
+            controller.error(err);
+          });
+        },
+        pull(controller) {
+          // Resume reading when the consumer is ready for more data
+          if (this.call) {
+            this.call.resume();
           }
-        });
-
-        call.on('end', () => {
-          if (!firstChunkReceived) {
-            // Handle empty files or missing data gracefully
-            resolve(new Response(readable, {
-              headers: { 'Content-Type': responseMimeType }
-            }));
+        },
+        cancel() {
+          // Cancel the gRPC call if the stream is aborted
+          if (this.call) {
+            this.call.cancel();
           }
-          writer.close();
-        });
-
-        call.on('error', (err) => {
-          console.error('grpc get error:', err);
-          if (!firstChunkReceived) {
-            resolve(new Response('Error', { status: 500 }));
-          }
-          writer.abort(err);
-        });
+        }
       });
+
+      return responsePromise;
     }
 
-    return net.fetch(url.pathToFileURL(decodedUrl).toString());
+    return new Response('Not found', { status: 404 });
   });
 
   createWindow();
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
 
-app.on('window-all-closed', function () {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.on('window-all-closed', function () {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
 
 let currentGrpcAddress = null;
+const allowedFilePaths = new Set();
 
+if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
     if (grpcClient && currentGrpcAddress === address) {
@@ -143,8 +181,12 @@ ipcMain.handle('grpc:connect', async (event, address) => {
       }
     }
 
+    const protoPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'proto/qrrot.proto') 
+      : path.join(__dirname, 'proto/qrrot.proto');
+
     const packageDefinition = protoLoader.loadSync(
-      path.join(__dirname, 'proto/qrrot.proto'),
+      protoPath,
       {
         keepCase: true,
         longs: String,
@@ -159,9 +201,19 @@ ipcMain.handle('grpc:connect', async (event, address) => {
       grpcClient.close();
     }
 
+    let credentials = grpc.credentials.createInsecure();
+    let cleanAddress = address;
+    if (address.startsWith('grpcs://')) {
+      cleanAddress = address.slice(8);
+      credentials = grpc.credentials.createSsl();
+    } else if (address.startsWith('grpc://')) {
+      cleanAddress = address.slice(7);
+      credentials = grpc.credentials.createInsecure();
+    }
+
     grpcClient = new qrrotProto.QrrotService(
-      address,
-      grpc.credentials.createInsecure()
+      cleanAddress,
+      credentials
     );
     currentGrpcAddress = address;
 
@@ -195,15 +247,25 @@ ipcMain.handle('grpc:del', async (event, key) => {
 });
 
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
+  if (!grpcClient) throw new Error('not connected to grpc server');
+  if (!allowedFilePaths.has(filePath)) throw new Error('Unauthorized file path');
+
+  let fileStats;
+  try {
+    fileStats = await fs.promises.stat(filePath);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('file does not exist');
+    throw err;
+  }
+
+  const totalSize = fileStats.size;
+
   return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    if (!fs.existsSync(filePath)) return reject(new Error('file does not exist'));
-
-    const fileStats = fs.statSync(filePath);
-    const totalSize = fileStats.size;
-
     const call = grpcClient.put((err, res) => {
-      if (err) return reject(err);
+      if (err) {
+        if (readStream) readStream.destroy();
+        return reject(err);
+      }
       resolve({ status: res.status, size: totalSize });
     });
 
@@ -233,12 +295,23 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
       call.destroy(err);
       reject(err);
     });
+
+    call.on('error', (err) => {
+      readStream.destroy();
+      reject(err);
+    });
   });
 });
+
 
 ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
+    if (!allowedSavePaths.has(savePath)) {
+      return reject(new Error('Unauthorized save path'));
+    }
+
+    allowedSavePaths.delete(savePath);
 
     const call = grpcClient.get({ key, token });
     let writeStream = null;
@@ -250,6 +323,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
         mimeType = res.metadata.mime_type;
         writeStream = fs.createWriteStream(savePath);
         writeStream.on('error', (err) => {
+          call.cancel();
           reject(err);
         });
       } else if (res.chunk) {
@@ -316,32 +390,53 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token }) => {
 });
 
 ipcMain.handle('registry:list', async () => {
-  return readRegistry();
+  return await readRegistry();
 });
 
 ipcMain.handle('registry:add', async (event, entry) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const index = registry.findIndex(e => e.key === entry.key);
   if (index >= 0) {
     registry[index] = { ...registry[index], ...entry, dateUpdated: new Date().toISOString() };
   } else {
     registry.push({ ...entry, dateAdded: new Date().toISOString() });
   }
-  writeRegistry(registry);
+  await writeRegistry(registry);
   return registry;
 });
 
 ipcMain.handle('registry:remove', async (event, key) => {
-  const registry = readRegistry();
+  const registry = await readRegistry();
   const updated = registry.filter(e => e.key !== key);
-  writeRegistry(updated);
+  await writeRegistry(updated);
   return updated;
 });
 
 ipcMain.handle('dialog:open', async (event, options) => {
-  return dialog.showOpenDialog(mainWindow, options);
+  const res = await dialog.showOpenDialog(mainWindow, options);
+  if (!res.canceled) {
+    res.filePaths.forEach(p => allowedFilePaths.add(p));
+  }
+  return res;
 });
 
 ipcMain.handle('dialog:save', async (event, options) => {
-  return dialog.showSaveDialog(mainWindow, options);
+  const res = await dialog.showSaveDialog(mainWindow, options);
+  if (!res.canceled && res.filePath) {
+    allowedFilePaths.add(res.filePath);
+  }
+  return res;
 });
+
+ipcMain.handle('dialog:authorizeDrop', async (event, filePath) => {
+  if (filePath) {
+    allowedFilePaths.add(filePath);
+  }
+  return true;
+});
+
+}
+
+if (process.env.NODE_ENV === 'test') {
+  module.exports = { readRegistry, writeRegistry };
+}

@@ -4,28 +4,29 @@
 
 @layer base {
   body {
-    @apply bg-bg-dark text-gray-100 font-sans overflow-hidden select-none h-screen w-screen m-0 p-0;
-  }
-}
-
-@layer utilities {
-  .bg-glow {
-    @apply absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 -z-10 pointer-events-none;
+    @apply bg-m3-surface text-m3-on-surface font-sans overflow-hidden select-none h-screen w-screen m-0 p-0;
   }
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  @apply bg-m3-outline-variant rounded-full border-2 border-solid border-transparent bg-clip-padding;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  @apply bg-m3-outline;
+}
+
+/* App Region utilities for Electron */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag-region {
+  -webkit-app-region: no-drag;
 }
