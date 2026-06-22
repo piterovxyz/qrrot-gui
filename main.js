@@ -214,9 +214,19 @@ ipcMain.handle('grpc:connect', async (event, address) => {
       grpcClient.close();
     }
 
+    let credentials = grpc.credentials.createInsecure();
+    let cleanAddress = address;
+    if (address.startsWith('grpcs://')) {
+      cleanAddress = address.slice(8);
+      credentials = grpc.credentials.createSsl();
+    } else if (address.startsWith('grpc://')) {
+      cleanAddress = address.slice(7);
+      credentials = grpc.credentials.createInsecure();
+    }
+
     grpcClient = new qrrotProto.QrrotService(
-      address,
-      grpc.credentials.createSsl()
+      cleanAddress,
+      credentials
     );
     currentGrpcAddress = address;
 
