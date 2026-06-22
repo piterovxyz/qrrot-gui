@@ -182,16 +182,7 @@ const allowedFilePaths = new Set();
 if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
-    if (grpcClient && currentGrpcAddress === address) {
-      const state = grpcClient.getChannel().getConnectivityState(true);
-      if (state !== grpc.connectivityState.TRANSIENT_FAILURE && state !== grpc.connectivityState.SHUTDOWN) {
-         return { success: true, state, cached: true };
-      }
-    }
-
-    const protoPath = app.isPackaged 
-      ? path.join(process.resourcesPath, 'proto/qrrot.proto') 
-      : path.join(__dirname, 'proto/qrrot.proto');
+    const protoPath = path.join(__dirname, 'proto/qrrot.proto');
 
     const packageDefinition = protoLoader.loadSync(
       protoPath,
@@ -225,11 +216,26 @@ ipcMain.handle('grpc:connect', async (event, address) => {
     );
     currentGrpcAddress = address;
 
+    const deadline = Date.now() + 3000;
     return new Promise((resolve) => {
-      const state = grpcClient.getChannel().getConnectivityState(true);
-      resolve({ success: true, state });
+      grpcClient.waitForReady(deadline, (err) => {
+        if (err) {
+          grpcClient.close();
+          grpcClient = null;
+          currentGrpcAddress = null;
+          resolve({ success: false, error: 'Failed to connect: ' + err.message });
+        } else {
+          const state = grpcClient.getChannel().getConnectivityState(false);
+          resolve({ success: true, state });
+        }
+      });
     });
   } catch (err) {
+    if (grpcClient) {
+      grpcClient.close();
+      grpcClient = null;
+      currentGrpcAddress = null;
+    }
     return { success: false, error: err.message };
   }
 });
