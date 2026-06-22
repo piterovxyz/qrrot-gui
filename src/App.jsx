@@ -57,7 +57,6 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [grpcAddress, setGrpcAddress] = useState('localhost:60945');
   const [registry, setRegistry] = useState([]);
-  const [landingToken, setLandingToken] = useState('');
   const [connectionError, setConnectionError] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -374,22 +373,7 @@ export default function App() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wider flex justify-between">
-                    <span>Decryption Token</span>
-                    <span className="text-gray-600">(optional)</span>
-                  </label>
-                  <input
-                    type="password"
-                    className="bg-black/40 border border-border-light rounded-xl text-gray-100 px-4 py-3 text-sm font-mono outline-none focus:border-orange-primary transition-colors"
-                    value={landingToken}
-                    onChange={(e) => {
-                      setLandingToken(e.target.value);
-                      setToken(e.target.value);
-                    }}
-                    placeholder="Enter token if required"
-                  />
-                </div>
+
 
                 {connectionError && (
                   <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-2 rounded-xl text-xs">
