@@ -13,6 +13,7 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.10.9",
     "@grpc/proto-loader": "^0.8.1",
+    "framer-motion": "^12.40.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
