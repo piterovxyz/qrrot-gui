@@ -54,8 +54,8 @@ function detectViewerType(mimeType) {
 }
 
 export default function App() {
+  const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:50051');
   const [connected, setConnected] = useState(false);
-  const [grpcAddress, setGrpcAddress] = useState('localhost:60945');
   const [registry, setRegistry] = useState([]);
   const [connectionError, setConnectionError] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
@@ -428,7 +428,7 @@ export default function App() {
               className="flex-1 bg-black/30 border border-border-light rounded-xl text-gray-100 px-3 py-1.5 text-sm font-mono outline-none focus:border-orange-primary transition-colors"
               value={grpcAddress}
               onChange={(e) => setGrpcAddress(e.target.value)}
-              placeholder="localhost:60945"
+              placeholder="127.0.0.1:50051"
             />
             <button
               className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors"
