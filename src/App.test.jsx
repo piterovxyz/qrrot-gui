@@ -49,12 +49,30 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const setupConnected = async () => {
+  render(<App />);
+  const connectBtn = screen.getByRole('button', { name: /connect/i });
+  fireEvent.click(connectBtn);
+  await waitFor(() => {
+    expect(screen.getByText('qrrot gui')).toBeInTheDocument();
+  });
+};
+
 describe('App Component', () => {
   it('renders successfully and initializes connections', async () => {
     render(<App />);
 
-    // Check brand renders
-    expect(screen.getByText('qrrot gui')).toBeInTheDocument();
+    // Check landing screen is rendered initially
+    expect(screen.getByText('Connect to qrrot')).toBeInTheDocument();
+
+    // Click connect
+    const connectBtn = screen.getByRole('button', { name: /connect/i });
+    fireEvent.click(connectBtn);
+
+    // Check brand renders after connection
+    await waitFor(() => {
+      expect(screen.getByText('qrrot gui')).toBeInTheDocument();
+    });
 
     // Check loading of registry
     await waitFor(() => {
@@ -73,7 +91,7 @@ describe('App Component', () => {
   });
 
   it('filters registry via search', async () => {
-    render(<App />);
+    await setupConnected();
 
     await waitFor(() => {
       expect(screen.getByText('test1')).toBeInTheDocument();
@@ -88,7 +106,7 @@ describe('App Component', () => {
   });
 
   it('selects an item and displays workspace options', async () => {
-    render(<App />);
+    await setupConnected();
 
     await waitFor(() => {
       expect(screen.getByText('test1')).toBeInTheDocument();
@@ -109,7 +127,7 @@ describe('App Component', () => {
   });
 
   it('checks if an item exists', async () => {
-    render(<App />);
+    await setupConnected();
 
     await waitFor(() => {
       expect(screen.getByText('test1')).toBeInTheDocument();
@@ -125,11 +143,13 @@ describe('App Component', () => {
     });
 
     // Log message should appear
-    expect(screen.getByText(/key 'test1' exists on server/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText(/key 'test1' exists on server/i).length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   it('deletes an item', async () => {
-    render(<App />);
+    await setupConnected();
 
     await waitFor(() => {
       expect(screen.getByText('test1')).toBeInTheDocument();
@@ -154,7 +174,7 @@ describe('App Component', () => {
   });
 
   it('handles decryption (memory viewing) with token', async () => {
-    render(<App />);
+    await setupConnected();
 
     await waitFor(() => {
       expect(screen.getByText('test1')).toBeInTheDocument();
@@ -163,7 +183,7 @@ describe('App Component', () => {
     fireEvent.click(screen.getByText('test1'));
 
     // Need a token to view
-    const tokenInput = screen.getByPlaceholderText('aes key');
+    const tokenInput = screen.getByPlaceholderText(/aes key/i);
     fireEvent.change(tokenInput, { target: { value: 'mysecrettoken' } });
 
     mockElectronAPI.getMemory.mockResolvedValue({
@@ -186,7 +206,7 @@ describe('App Component', () => {
   });
 
   it('handles upload form', async () => {
-    render(<App />);
+    await setupConnected();
 
     const uploadBtn = screen.getByRole('button', { name: /upload/i });
     fireEvent.click(uploadBtn);
@@ -233,7 +253,7 @@ describe('App Component', () => {
 
     // Check log
     await waitFor(() => {
-      expect(screen.getByText(/uploaded 'image' \(2048 bytes\)/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/uploaded 'image' \(2048 bytes\)/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

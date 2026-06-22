@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron:start": "electron .",
-    "test": "jest"
+    "test": "vitest run"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.10.9",
@@ -28,6 +28,7 @@
     "clsx": "^2.1.1",
     "electron": "42.4.1",
     "jest": "^30.4.2",
+    "jsdom": "^29.1.1",
     "lucide-react": "^1.21.0",
     "postcss": "^8.5.15",
     "tailwind-merge": "^3.6.0",

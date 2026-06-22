@@ -37,10 +37,6 @@ async function writeRegistry(data) {
   }
 }
 
-// Export for testing
-if (process.env.NODE_ENV === 'test') {
-  module.exports = { writeRegistry };
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -254,10 +250,16 @@ ipcMain.handle('grpc:del', async (event, key) => {
 });
 
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
-  return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    if (!allowedFilePaths.has(filePath)) return reject(new Error('Unauthorized file path'));
-    if (!fs.existsSync(filePath)) return reject(new Error('file does not exist'));
+  if (!grpcClient) throw new Error('not connected to grpc server');
+  if (!allowedFilePaths.has(filePath)) throw new Error('Unauthorized file path');
+
+  let fileStats;
+  try {
+    fileStats = await fs.promises.stat(filePath);
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('file does not exist');
+    throw err;
+  }
 
   const totalSize = fileStats.size;
 
@@ -295,6 +297,7 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
     });
   });
 });
+
 
 ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
   return new Promise((resolve, reject) => {
@@ -425,6 +428,8 @@ ipcMain.handle('dialog:authorizeDrop', async (event, filePath) => {
   }
   return true;
 });
+
+}
 
 if (process.env.NODE_ENV === 'test') {
   module.exports = { readRegistry, writeRegistry };
