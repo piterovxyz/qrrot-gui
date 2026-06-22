@@ -122,7 +122,27 @@ app.whenReady().then(() => {
       });
     }
 
-    return net.fetch(url.pathToFileURL(decodedUrl).toString());
+    const tempDir = app.getPath('temp');
+    const userDataDir = app.getPath('userData');
+
+    // Convert file URL string to actual path if needed, or use decodedUrl directly
+    let absolutePath = path.resolve(decodedUrl);
+
+    const isPathInsideDir = (dir, targetPath) => {
+      const relativePath = path.relative(dir, targetPath);
+      return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+    };
+
+    if (
+      isPathInsideDir(tempDir, absolutePath) ||
+      isPathInsideDir(userDataDir, absolutePath) ||
+      absolutePath === tempDir || absolutePath === userDataDir
+    ) {
+      return net.fetch(url.pathToFileURL(absolutePath).toString());
+    }
+
+    console.error(`Blocked unauthorized file access via protocol handler: ${absolutePath}`);
+    return new Response('Forbidden', { status: 403 });
   });
 
   createWindow();
