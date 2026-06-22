@@ -226,11 +226,6 @@ ipcMain.handle('grpc:connect', async (event, address) => {
           resolve({ success: false, error: 'Failed to connect: ' + err.message });
         } else {
           const state = grpcClient.getChannel().getConnectivityState(false);
-          try {
-            await writeRegistry([]);
-          } catch (e) {
-            console.error('failed to clear registry on connect:', e);
-          }
           resolve({ success: true, state });
         }
       });
@@ -243,6 +238,39 @@ ipcMain.handle('grpc:connect', async (event, address) => {
     }
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('grpc:keys', async (event) => {
+  return new Promise((resolve, reject) => {
+    if (!grpcClient) return reject(new Error('not connected to grpc server'));
+
+    const call = grpcClient.keys({});
+    const keys = [];
+
+    call.on('data', (res) => {
+      if (res.keys) {
+        const mapped = res.keys.map(k => ({
+          key: k.key,
+          size: Number(k.size),
+          mimeType: k.mime_type || 'application/octet-stream'
+        }));
+        keys.push(...mapped);
+      }
+    });
+
+    call.on('end', async () => {
+      try {
+        await writeRegistry(keys);
+        resolve(keys);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    call.on('error', (err) => {
+      reject(err);
+    });
+  });
 });
 
 ipcMain.handle('grpc:exists', async (event, key) => {
