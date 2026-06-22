@@ -1,47 +1,56 @@
-# qrrot gui
+# Qrrot GUI
 
-a beautiful, cross-platform desktop client for the qrrot database, built using electron, react, and vite. it communicates directly with the database server using standard gRPC streaming.
+Десктопный клиент для базы данных Qrrot. Построен на Electron, React и Vite.
 
----
+## Принцип работы
 
-## key features
+1. **gRPC протокол:** Приложение взаимодействует с сервером Qrrot по протоколу gRPC. Схема API загружается из файла `proto/qrrot.proto`.
+2. **Локальный реестр:** Список загруженных ключей сохраняется локально в файле `qrrot_registry.json` в рабочей директории приложения (`userData`).
+3. **Потоковая передача:** Запись и чтение файлов осуществляются чанками по 64 КБ через gRPC-стримы (запросы `Put` и `Get`), что исключает ограничения gRPC на максимальный размер сообщения.
+4. **Просмотр файлов:** Поддерживается воспроизведение и предпросмотр медиафайлов (изображения, аудио, видео, текст) непосредственно в интерфейсе после их дешифрования.
 
-- **glassmorphic design:** ultra-premium dark theme styled with custom vanilla CSS.
-- **native file operations:** uses electron native dialogs for choosing files to upload and save locations.
-- **in-app media previews:** view decrypted images, audio, and video streams directly inside the client workspace.
-- **streaming chunk put/get:** streams data in 64kb chunks, avoiding gRPC message size limitations and tracking progress.
-- **local index registry:** maintains a local index registry file mapping your uploaded keys and mime types for quick access.
+## Установка и запуск
 
----
+### 1. Установка зависимостей
 
-## setup and execution
-
-### 1. install dependencies
-
-ensure node.js v18+ is installed:
+Требуется Node.js v18+:
 
 ```bash
 npm install
 ```
 
-### 2. run in development mode
+### 2. Запуск в режиме разработки
 
-start the vite development server:
+Запустите сервер Vite:
 
 ```bash
 npm run dev
 ```
 
-in a separate terminal window, launch the electron app:
+В другом терминале запустите Electron:
 
 ```bash
 npm run electron:start
 ```
 
-### 3. compile production build
+### 3. Тестирование
 
-generate the optimized web assets:
+Запуск тестов Vitest:
+
+```bash
+npm test
+```
+
+### 4. Сборка приложения
+
+Сборка оптимизированных фронтенд-ресурсов:
 
 ```bash
 npm run build
+```
+
+Сборка готового дистрибутива приложения для текущей платформы (electron-builder):
+
+```bash
+npm run dist
 ```

@@ -8,7 +8,6 @@
   }
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -23,7 +22,6 @@
   @apply bg-m3-outline;
 }
 
-/* App Region utilities for Electron */
 .drag-region {
   -webkit-app-region: drag;
 }

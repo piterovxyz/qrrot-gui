@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, protocol, net, dialog } = require('electron');
+app.name = 'Qrrot';
 const path = require('path');
 const fs = require('fs');
 const url = require('url');
@@ -11,7 +12,21 @@ const allowedSavePaths = new Set();
 
 let registryPath;
 try {
-  registryPath = path.join(app.getPath('userData'), 'qrrot_registry.json');
+  const newUserData = app.getPath('userData');
+  registryPath = path.join(newUserData, 'qrrot_registry.json');
+
+  if (!fs.existsSync(registryPath)) {
+    const oldUserData = path.join(path.dirname(newUserData), 'qrrot-gui');
+    const oldRegistryPath = path.join(oldUserData, 'qrrot_registry.json');
+    if (fs.existsSync(oldRegistryPath)) {
+      try {
+        fs.mkdirSync(newUserData, { recursive: true });
+        fs.copyFileSync(oldRegistryPath, registryPath);
+      } catch (err) {
+        console.error('failed to migrate registry:', err);
+      }
+    }
+  }
 } catch (e) {
   registryPath = path.join('/mock/path', 'qrrot_registry.json');
 }
@@ -74,7 +89,6 @@ if (app) {
     protocol.handle('qrrot-media', async (request) => {
       const urlObj = new URL(request.url);
       
-      // the url will be something like qrrot-media://stream/key?token=xxx
       if (urlObj.pathname.startsWith('//stream/')) {
         const key = urlObj.pathname.replace('//stream/', '');
         const token = urlObj.searchParams.get('token');
@@ -83,8 +97,6 @@ if (app) {
         return new Response('Not connected', { status: 500 });
       }
 
-      // We wait for the first chunk to arrive before we return the response
-      // so we can set the content type correctly.
       let responseMimeType = 'application/octet-stream';
       let firstChunkReceived = false;
       let resolveResponse;
@@ -111,7 +123,6 @@ if (app) {
 
               controller.enqueue(res.chunk);
 
-              // Apply backpressure if the queue is getting full
               if (controller.desiredSize <= 0) {
                 call.pause();
               }
@@ -120,7 +131,6 @@ if (app) {
 
           call.on('end', () => {
             if (!firstChunkReceived) {
-              // Handle empty files or missing data gracefully
               resolveResponse(new Response(readable, {
                 headers: { 'Content-Type': responseMimeType }
               }));
@@ -137,13 +147,11 @@ if (app) {
           });
         },
         pull(controller) {
-          // Resume reading when the consumer is ready for more data
           if (this.call) {
             this.call.resume();
           }
         },
         cancel() {
-          // Cancel the gRPC call if the stream is aborted
           if (this.call) {
             this.call.cancel();
           }
@@ -174,16 +182,7 @@ const allowedFilePaths = new Set();
 if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
-    if (grpcClient && currentGrpcAddress === address) {
-      const state = grpcClient.getChannel().getConnectivityState(true);
-      if (state !== grpc.connectivityState.TRANSIENT_FAILURE && state !== grpc.connectivityState.SHUTDOWN) {
-         return { success: true, state, cached: true };
-      }
-    }
-
-    const protoPath = app.isPackaged 
-      ? path.join(process.resourcesPath, 'proto/qrrot.proto') 
-      : path.join(__dirname, 'proto/qrrot.proto');
+    const protoPath = path.join(__dirname, 'proto/qrrot.proto');
 
     const packageDefinition = protoLoader.loadSync(
       protoPath,
@@ -217,11 +216,26 @@ ipcMain.handle('grpc:connect', async (event, address) => {
     );
     currentGrpcAddress = address;
 
+    const deadline = Date.now() + 3000;
     return new Promise((resolve) => {
-      const state = grpcClient.getChannel().getConnectivityState(true);
-      resolve({ success: true, state });
+      grpcClient.waitForReady(deadline, (err) => {
+        if (err) {
+          grpcClient.close();
+          grpcClient = null;
+          currentGrpcAddress = null;
+          resolve({ success: false, error: 'Failed to connect: ' + err.message });
+        } else {
+          const state = grpcClient.getChannel().getConnectivityState(false);
+          resolve({ success: true, state });
+        }
+      });
     });
   } catch (err) {
+    if (grpcClient) {
+      grpcClient.close();
+      grpcClient = null;
+      currentGrpcAddress = null;
+    }
     return { success: false, error: err.message };
   }
 });

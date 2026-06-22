@@ -31,7 +31,10 @@ const mockElectron = {
       }
     })
   },
-  protocol: { handle: vi.fn(function () {}) },
+  protocol: { 
+    handle: vi.fn(function () {}),
+    registerSchemesAsPrivileged: vi.fn(function () {})
+  },
   net: { fetch: vi.fn(function () {}) },
   dialog: {
     showOpenDialog: vi.fn(function () {}),
