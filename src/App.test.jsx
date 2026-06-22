@@ -38,6 +38,11 @@ beforeEach(() => {
     { key: 'test2', mimeType: 'image/png', size: 2048 },
     { key: 'test3', mimeType: 'video/mp4', size: 1048576 }
   ]);
+  mockElectronAPI.getMemory.mockResolvedValue({
+    data: new Uint8Array(),
+    mimeType: 'text/plain',
+    size: 0
+  });
 
   // Mock window features
   window.confirm = vi.fn(() => true);
@@ -116,6 +121,10 @@ describe('App Component', () => {
     const item = screen.getByText('test1');
     fireEvent.click(item);
 
+    await waitFor(() => {
+      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
+    });
+
     // Header should update to display 'test1'
     expect(screen.getAllByText('test1').length).toBeGreaterThan(1);
 
@@ -134,6 +143,10 @@ describe('App Component', () => {
     });
 
     fireEvent.click(screen.getByText('test1'));
+
+    await waitFor(() => {
+      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
+    });
 
     const checkBtn = screen.getByTitle('Check Exists');
     fireEvent.click(checkBtn);
@@ -156,6 +169,10 @@ describe('App Component', () => {
     });
 
     fireEvent.click(screen.getByText('test1'));
+
+    await waitFor(() => {
+      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
+    });
 
     const deleteBtn = screen.getByTitle('Delete');
     fireEvent.click(deleteBtn);
@@ -182,6 +199,10 @@ describe('App Component', () => {
 
     fireEvent.click(screen.getByText('test1'));
 
+    await waitFor(() => {
+      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
+    });
+
     // Need a token to view
     const tokenInput = screen.getByPlaceholderText(/aes key/i);
     fireEvent.change(tokenInput, { target: { value: 'mysecrettoken' } });
@@ -196,7 +217,7 @@ describe('App Component', () => {
     fireEvent.click(decryptBtn);
 
     await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: 'mysecrettoken' });
+      expect(mockElectronAPI.getMemory).toHaveBeenLastCalledWith({ key: 'test1', token: 'mysecrettoken' });
     });
 
     // Look for text content

@@ -93,10 +93,71 @@ export default function App() {
     }
   };
 
-  const handleSelectKey = (entry) => {
+  const viewKeyDirectly = async (keyEntry, currentToken) => {
+    if (!keyEntry) return;
+
+    try {
+      setLoading(true);
+      setLoadingProgress(0);
+      setLoadingText(`decrypting '${keyEntry.key}'...`);
+      setViewerData(null);
+
+      const type = detectViewerType(keyEntry.mimeType);
+
+      // If file is <= 50MB and is an image or text, decrypt in memory
+      if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text')) {
+         const res = await window.electronAPI.getMemory({ key: keyEntry.key, token: currentToken });
+         let url = '';
+         let textContent = '';
+
+         if (res && res.data) {
+           if (type === 'text') {
+               const decoder = new TextDecoder('utf-8');
+               textContent = decoder.decode(res.data);
+           } else if (type === 'image') {
+               const blob = new Blob([res.data], { type: res.mimeType });
+               url = URL.createObjectURL(blob);
+           }
+         }
+
+         setViewerData(prev => {
+            if (prev?.url && prev.url.startsWith('blob:')) {
+               URL.revokeObjectURL(prev.url);
+            }
+            return {
+               type,
+               mimeType: res ? res.mimeType : keyEntry.mimeType,
+               size: res ? res.size : keyEntry.size,
+               url,
+               text: textContent
+            };
+         });
+         addLog(`decrypted '${keyEntry.key}' to memory (${res ? res.size : 0} bytes)`, 'success');
+      } else {
+         // Streaming media or large files
+         const streamUrl = `qrrot-media://stream/${keyEntry.key}?token=${encodeURIComponent(currentToken)}`;
+         setViewerData({
+            type,
+            mimeType: keyEntry.mimeType,
+            size: keyEntry.size,
+            url: streamUrl,
+            text: ''
+         });
+         addLog(`streaming '${keyEntry.key}' via local proxy`, 'success');
+      }
+    } catch (err) {
+      addLog(`decrypt failed: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+      setLoadingProgress(null);
+    }
+  };
+
+  const handleSelectKey = async (entry) => {
     setSelectedKey(entry);
     setViewerData(null);
     setToken(''); // Reset token when switching keys
+    await viewKeyDirectly(entry, '');
   };
 
   const handleCheckExists = async () => {
@@ -133,60 +194,7 @@ export default function App() {
 
   const handleViewKey = async () => {
     if (!selectedKey) return;
-
-    try {
-      setLoading(true);
-      setLoadingProgress(0);
-      setLoadingText(`decrypting '${selectedKey.key}'...`);
-      setViewerData(null);
-
-      const type = detectViewerType(selectedKey.mimeType);
-
-      // If file is <= 50MB and is an image or text, decrypt in memory
-      if (selectedKey.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text')) {
-         const res = await window.electronAPI.getMemory({ key: selectedKey.key, token });
-         let url = '';
-         let textContent = '';
-
-         if (type === 'text') {
-             const decoder = new TextDecoder('utf-8');
-             textContent = decoder.decode(res.data);
-         } else if (type === 'image') {
-             const blob = new Blob([res.data], { type: res.mimeType });
-             url = URL.createObjectURL(blob);
-         }
-
-         setViewerData(prev => {
-            if (prev?.url && prev.url.startsWith('blob:')) {
-               URL.revokeObjectURL(prev.url);
-            }
-            return {
-               type,
-               mimeType: res.mimeType,
-               size: res.size,
-               url,
-               text: textContent
-            };
-         });
-         addLog(`decrypted '${selectedKey.key}' to memory (${res.size} bytes)`, 'success');
-      } else {
-         // Streaming media or large files
-         const streamUrl = `qrrot-media://stream/${selectedKey.key}?token=${encodeURIComponent(token)}`;
-         setViewerData({
-            type,
-            mimeType: selectedKey.mimeType,
-            size: selectedKey.size,
-            url: streamUrl,
-            text: ''
-         });
-         addLog(`streaming '${selectedKey.key}' via local proxy`, 'success');
-      }
-    } catch (err) {
-      addLog(`decrypt failed: ${err.message}`, 'error');
-    } finally {
-      setLoading(false);
-      setLoadingProgress(null);
-    }
+    await viewKeyDirectly(selectedKey, token);
   };
 
   const handleDownloadKey = async () => {
@@ -439,8 +447,10 @@ export default function App() {
                 />
               )}
               <div className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border relative z-10",
-                selectedKey?.key === item.key ? "bg-orange-primary/20 border-orange-primary/40" : "bg-white/5 border-border-light"
+                "w-9 h-9 flex items-center justify-center shrink-0 border relative z-10 transition-all duration-300 ease-out",
+                selectedKey?.key === item.key
+                  ? "bg-orange-primary/20 border-orange-primary/40 rounded-[6px_14px_6px_6px]"
+                  : "bg-white/5 border-border-light rounded-[14px_6px_14px_14px] hover:rounded-[8px_14px_8px_8px]"
               )}>
                 {getIcon(item.mimeType)}
               </div>
@@ -488,18 +498,21 @@ export default function App() {
                   placeholder="aes key (optional)"
                 />
               </div>
-              <button
-                className="bg-gradient-to-r from-orange-primary to-orange-hover hover:opacity-90 text-white rounded-xl px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
-                onClick={handleViewKey}
-              >
-                <Eye size={16} /> decrypt
-              </button>
-              <button
-                className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
-                onClick={handleDownloadKey}
-              >
-                <Download size={16} /> save
-              </button>
+              <div className="flex items-center bg-white/5 border border-border-light rounded-xl overflow-hidden no-drag-region">
+                <button
+                  className="bg-gradient-to-r from-orange-primary to-orange-hover hover:opacity-90 text-white px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5 border-r border-orange-primary/30"
+                  onClick={handleViewKey}
+                >
+                  <Eye size={16} /> decrypt
+                </button>
+                <button
+                  className="hover:bg-white/10 text-gray-100 px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5"
+                  onClick={handleDownloadKey}
+                  title="Save to disk"
+                >
+                  <Download size={16} /> save
+                </button>
+              </div>
               <div className="w-px h-6 bg-border-light mx-1"></div>
               <button
                 className="bg-white/5 hover:bg-white/10 border border-border-light text-gray-100 rounded-xl px-3 py-1.5 text-sm font-semibold transition-all"
@@ -520,15 +533,23 @@ export default function App() {
         </div>
 
         {/* Viewport */}
-        <div className={`flex-1 p-8 flex items-center justify-center overflow-hidden ${consoleExpanded ? 'mb-[200px]' : 'mb-8'} transition-all duration-300 ease-in-out`}>
+        <div className="flex-1 p-8 flex items-center justify-center overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center gap-5">
               <motion.div
-                animate={{ scale: [1, 1.15, 1], rotate: [0, 360] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                className="w-16 h-16 rounded-full bg-orange-primary/10 flex items-center justify-center border border-orange-primary/30 shadow-[0_0_15px_rgba(255,107,0,0.4)]"
+                animate={{ 
+                  borderRadius: ["30% 70% 70% 30% / 30% 30% 70% 70%", "50% 50% 20% 80% / 20% 80% 20% 80%", "30% 70% 70% 30% / 30% 30% 70% 70%"],
+                  rotate: [0, 180, 360],
+                  scale: [1, 1.1, 1]
+                }}
+                transition={{ 
+                  duration: 4, 
+                  repeat: Infinity, 
+                  ease: "linear" 
+                }}
+                className="w-16 h-16 bg-orange-primary/10 flex items-center justify-center border border-orange-primary/30 shadow-[0_0_15px_rgba(255,107,0,0.4)] text-3xl"
               >
-                <div className="text-3xl text-orange-primary">⚡</div>
+                ⚡
               </motion.div>
               <p className="text-gray-400 text-sm">{loadingText}</p>
               {loadingProgress !== null && (
@@ -665,12 +686,11 @@ export default function App() {
           </div>
         )}
 
-        {/* Collapsible Console Footer */}
         <motion.div
             initial={false}
             animate={{ height: consoleExpanded ? 200 : 32 }}
             transition={{ type: "spring", stiffness: 280, damping: 32, mass: 1.0 }}
-            className="absolute bottom-0 left-0 w-full bg-black/90 border-t border-border-light flex flex-col z-40 overflow-hidden"
+            className="w-full bg-black/90 border-t border-border-light flex flex-col z-40 overflow-hidden shrink-0 relative"
         >
            <div
              className="flex items-center justify-between px-4 h-8 min-h-[32px] cursor-pointer hover:bg-white/5 transition-colors select-none"
