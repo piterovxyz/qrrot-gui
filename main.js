@@ -190,6 +190,7 @@ if (app) {
 }
 
 let currentGrpcAddress = null;
+const allowedFilePaths = new Set();
 
 if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
@@ -253,15 +254,10 @@ ipcMain.handle('grpc:del', async (event, key) => {
 });
 
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
-  if (!grpcClient) throw new Error('not connected to grpc server');
-
-  let fileStats;
-  try {
-    fileStats = await fs.promises.stat(filePath);
-  } catch (err) {
-    if (err.code === 'ENOENT') throw new Error('file does not exist');
-    throw err;
-  }
+  return new Promise((resolve, reject) => {
+    if (!grpcClient) return reject(new Error('not connected to grpc server'));
+    if (!allowedFilePaths.has(filePath)) return reject(new Error('Unauthorized file path'));
+    if (!fs.existsSync(filePath)) return reject(new Error('file does not exist'));
 
   const totalSize = fileStats.size;
 
@@ -408,15 +404,26 @@ ipcMain.handle('registry:remove', async (event, key) => {
 });
 
 ipcMain.handle('dialog:open', async (event, options) => {
-  return dialog.showOpenDialog(mainWindow, options);
+  const res = await dialog.showOpenDialog(mainWindow, options);
+  if (!res.canceled) {
+    res.filePaths.forEach(p => allowedFilePaths.add(p));
+  }
+  return res;
 });
 
 ipcMain.handle('dialog:save', async (event, options) => {
-  const result = await dialog.showSaveDialog(mainWindow, options);
-  if (!result.canceled && result.filePath) {
-    allowedSavePaths.add(result.filePath);
+  const res = await dialog.showSaveDialog(mainWindow, options);
+  if (!res.canceled && res.filePath) {
+    allowedFilePaths.add(res.filePath);
   }
-  return result;
+  return res;
+});
+
+ipcMain.handle('dialog:authorizeDrop', async (event, filePath) => {
+  if (filePath) {
+    allowedFilePaths.add(filePath);
+  }
+  return true;
 });
 
 if (process.env.NODE_ENV === 'test') {
