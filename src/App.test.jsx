@@ -127,12 +127,10 @@ describe('App Component', () => {
     const item = screen.getByText('test1');
     fireEvent.click(item);
 
-    await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
-    });
-
     // Header should update to display 'test1'
-    expect(screen.getAllByText('test1').length).toBeGreaterThan(1);
+    await waitFor(() => {
+      expect(screen.getAllByText('test1').length).toBeGreaterThan(1);
+    });
 
     // Buttons should appear
     expect(screen.getByRole('button', { name: /decrypt/i })).toBeInTheDocument();
@@ -149,8 +147,9 @@ describe('App Component', () => {
 
     fireEvent.click(screen.getByText('test1'));
 
+    // Header should update
     await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
+      expect(screen.getAllByText('test1').length).toBeGreaterThan(1);
     });
 
     // Need a token to view
@@ -167,7 +166,7 @@ describe('App Component', () => {
     fireEvent.click(decryptBtn);
 
     await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenLastCalledWith({ key: 'test1', token: 'mysecrettoken' });
+      expect(mockElectronAPI.getMemory).toHaveBeenLastCalledWith({ key: 'test1', token: 'mysecrettoken', size: 100, mimeType: 'text/plain' });
     });
 
     // Look for text content
