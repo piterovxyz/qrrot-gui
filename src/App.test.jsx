@@ -10,7 +10,7 @@ const mockElectronAPI = {
   onDownloadProgress: vi.fn(() => vi.fn()),
   getRegistry: vi.fn(),
   connect: vi.fn(),
-  exists: vi.fn(),
+
   del: vi.fn(),
   removeRegistry: vi.fn(),
   getMemory: vi.fn(),
@@ -38,7 +38,7 @@ beforeEach(() => {
   ]);
 
   mockElectronAPI.connect.mockResolvedValue({ success: true, cached: false });
-  mockElectronAPI.exists.mockResolvedValue(true);
+
   mockElectronAPI.del.mockResolvedValue();
   mockElectronAPI.removeRegistry.mockResolvedValue([
     { key: 'test2', mimeType: 'image/png', size: 2048 },
@@ -137,30 +137,10 @@ describe('App Component', () => {
     // Buttons should appear
     expect(screen.getByRole('button', { name: /decrypt/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
-    expect(screen.getByTitle('Check Exists')).toBeInTheDocument();
+
     expect(screen.getByTitle('Delete')).toBeInTheDocument();
   });
 
-  it('checks if an item exists', async () => {
-    await setupConnected();
-
-    await waitFor(() => {
-      expect(screen.getByText('test1')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('test1'));
-
-    await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
-    });
-
-    const checkBtn = screen.getByTitle('Check Exists');
-    fireEvent.click(checkBtn);
-
-    await waitFor(() => {
-      expect(mockElectronAPI.exists).toHaveBeenCalledWith('test1');
-    });
-  });
 
   it('deletes an item', async () => {
     await setupConnected();
@@ -181,7 +161,7 @@ describe('App Component', () => {
     expect(window.confirm).toHaveBeenCalledWith("delete 'test1'?");
 
     await waitFor(() => {
-      expect(mockElectronAPI.del).toHaveBeenCalledWith('test1');
+      expect(mockElectronAPI.del).toHaveBeenCalledWith({ key: 'test1', token: '' });
       expect(mockElectronAPI.removeRegistry).toHaveBeenCalledWith('test1');
     });
 

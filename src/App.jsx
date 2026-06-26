@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, HardDrive, Upload, CheckCircle2, XCircle, Trash2, Download,
+  Search, HardDrive, Upload, XCircle, Trash2, Download,
   Eye, RefreshCw, X, FileUp, Box, Music
 } from 'lucide-react';
 import { cn } from './lib/utils';
@@ -171,18 +171,7 @@ export default function App() {
     await viewKeyDirectly(entry, '');
   }, [viewKeyDirectly]);
 
-  const handleCheckExists = useCallback(async () => {
-    if (!selectedKey) return;
-    try {
-      const exists = await window.electronAPI.exists(selectedKey.key);
-      addLog(
-        exists ? `key '${selectedKey.key}' exists on server` : `key '${selectedKey.key}' not found on server`,
-        exists ? 'success' : 'error'
-      );
-    } catch (err) {
-      addLog(`exists check failed: ${err.message}`, 'error');
-    }
-  }, [selectedKey, addLog]);
+
 
   const handleDeleteKey = useCallback(async () => {
     if (!selectedKey) return;
@@ -190,7 +179,7 @@ export default function App() {
     try {
       setLoading(true);
       setLoadingText('deleting...');
-      await window.electronAPI.del(selectedKey.key);
+      await window.electronAPI.del({ key: selectedKey.key, token });
       addLog(`deleted '${selectedKey.key}'`, 'success');
       const updated = await window.electronAPI.removeRegistry(selectedKey.key);
       setRegistry(updated);
@@ -201,7 +190,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [selectedKey, addLog]);
+  }, [selectedKey, token, addLog]);
 
   const handleViewKey = useCallback(async () => {
     if (!selectedKey) return;
@@ -574,16 +563,7 @@ export default function App() {
                     >
                       <Download size={14} /> <span className="hidden sm:inline">Save</span>
                     </motion.button>
-                    <div className="h-6 w-px bg-m3-outline-variant/30 hidden sm:block mx-1"></div>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="bg-m3-surface-variant hover:bg-m3-surface-variant/80 text-m3-on-surface rounded-full w-9 h-9 flex items-center justify-center transition-colors shadow-sm shrink-0"
-                      onClick={handleCheckExists}
-                      title="Check Exists"
-                    >
-                      <CheckCircle2 size={16} />
-                    </motion.button>
+
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.9 }}
