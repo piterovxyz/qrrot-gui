@@ -9,6 +9,26 @@ const protoLoader = require('@grpc/proto-loader');
 let mainWindow;
 let grpcClient = null;
 const allowedSavePaths = new Set();
+const activeCalls = new Map();
+
+function generateGibberish(size, mimeType = '') {
+  const bufferSize = Math.min(size || 1024, 10 * 1024 * 1024);
+  const buffer = Buffer.alloc(bufferSize);
+  const mime = (mimeType || '').toLowerCase();
+  const isText = mime.startsWith('text/') || mime === 'application/json' || mime === 'application/javascript';
+  
+  if (isText) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 \n\r\t.,!?-+=*/';
+    for (let i = 0; i < bufferSize; i++) {
+      buffer[i] = chars.charCodeAt(Math.floor(Math.random() * chars.length));
+    }
+  } else {
+    for (let i = 0; i < bufferSize; i++) {
+      buffer[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return buffer;
+}
 
 let registryPath;
 try {
@@ -182,6 +202,7 @@ const allowedFilePaths = new Set();
 if (ipcMain) {
 ipcMain.handle('grpc:connect', async (event, address) => {
   try {
+    activeCalls.clear();
     const protoPath = path.join(__dirname, 'proto/qrrot.proto');
 
     const packageDefinition = protoLoader.loadSync(
@@ -260,8 +281,13 @@ ipcMain.handle('grpc:keys', async (event, token) => {
 
     call.on('end', async () => {
       try {
-        await writeRegistry(keys);
-        resolve(keys);
+        const localRegistry = await readRegistry();
+        const registryMap = new Map();
+        localRegistry.forEach(item => registryMap.set(item.key, item));
+        keys.forEach(item => registryMap.set(item.key, item));
+        const mergedKeys = Array.from(registryMap.values());
+        await writeRegistry(mergedKeys);
+        resolve(mergedKeys);
       } catch (err) {
         reject(err);
       }
@@ -290,12 +316,15 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
 
   return new Promise((resolve, reject) => {
     const call = grpcClient.put((err, res) => {
+      activeCalls.delete(key);
       if (err) {
         if (readStream) readStream.destroy();
         return reject(err);
       }
       resolve({ status: res.status, size: totalSize });
     });
+
+    activeCalls.set(key, call);
 
     call.write({
       metadata: { key, mime_type: mimeType },
@@ -320,11 +349,13 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
     });
 
     readStream.on('error', (err) => {
+      activeCalls.delete(key);
       call.destroy(err);
       reject(err);
     });
 
     call.on('error', (err) => {
+      activeCalls.delete(key);
       readStream.destroy();
       reject(err);
     });
@@ -332,7 +363,7 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
 });
 
 
-ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
+ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mimeType }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
     if (!allowedSavePaths.has(savePath)) {
@@ -342,21 +373,24 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
     allowedSavePaths.delete(savePath);
 
     const call = grpcClient.get({ key, token });
+    activeCalls.set(key, call);
+
     let writeStream = null;
-    let mimeType = '';
+    let responseMimeType = mimeType || '';
     let bytesDownloaded = 0;
 
     call.on('data', (res) => {
       if (res.metadata) {
-        mimeType = res.metadata.mime_type;
+        responseMimeType = res.metadata.mime_type || responseMimeType;
         writeStream = fs.createWriteStream(savePath);
         writeStream.on('error', (err) => {
+          activeCalls.delete(key);
           call.cancel();
           reject(err);
         });
       } else if (res.chunk) {
         bytesDownloaded += res.chunk.length;
-        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded });
+        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
         if (writeStream) {
           writeStream.write(res.chunk);
         }
@@ -364,57 +398,88 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath }) => {
     });
 
     call.on('end', () => {
+      activeCalls.delete(key);
       if (writeStream) {
         writeStream.end(() => {
-          resolve({ filePath: savePath, mimeType, size: bytesDownloaded });
+          resolve({ filePath: savePath, mimeType: responseMimeType, size: bytesDownloaded });
         });
       } else {
         reject(new Error('key not found or invalid response'));
       }
     });
 
-    call.on('error', (err) => {
+    call.on('error', async (err) => {
+      activeCalls.delete(key);
       if (writeStream) {
         writeStream.destroy();
       }
-      reject(err);
+      if (err.message && err.message.includes('invalid token')) {
+        try {
+          const gibberishData = generateGibberish(size || 1024, responseMimeType || 'application/octet-stream');
+          await fs.promises.writeFile(savePath, gibberishData);
+          resolve({ filePath: savePath, mimeType: responseMimeType || 'application/octet-stream', size: gibberishData.length, isGibberish: true });
+        } catch (writeErr) {
+          reject(writeErr);
+        }
+      } else {
+        reject(err);
+      }
     });
   });
 });
 
-ipcMain.handle('grpc:get:memory', async (event, { key, token }) => {
+ipcMain.handle('grpc:get:memory', async (event, { key, token, size, mimeType }) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
 
     const call = grpcClient.get({ key, token });
-    let mimeType = '';
+    activeCalls.set(key, call);
+
+    let responseMimeType = mimeType || '';
     let bytesDownloaded = 0;
     const chunks = [];
 
     call.on('data', (res) => {
       if (res.metadata) {
-        mimeType = res.metadata.mime_type;
+        responseMimeType = res.metadata.mime_type || responseMimeType;
       } else if (res.chunk) {
         bytesDownloaded += res.chunk.length;
         chunks.push(res.chunk);
-        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded });
+        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
       }
     });
 
     call.on('end', () => {
-      if (chunks.length > 0 || mimeType) {
+      activeCalls.delete(key);
+      if (chunks.length > 0 || responseMimeType) {
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const resultBuffer = Buffer.concat(chunks, totalLength);
-        resolve({ mimeType, size: bytesDownloaded, data: resultBuffer });
+        resolve({ mimeType: responseMimeType, size: bytesDownloaded, data: resultBuffer });
       } else {
         reject(new Error('key not found or invalid response'));
       }
     });
 
     call.on('error', (err) => {
-      reject(err);
+      activeCalls.delete(key);
+      if (err.message && err.message.includes('invalid token')) {
+        const gibberishData = generateGibberish(size || 1024, responseMimeType || 'application/octet-stream');
+        resolve({ mimeType: responseMimeType || 'application/octet-stream', size: gibberishData.length, data: gibberishData, isGibberish: true });
+      } else {
+        reject(err);
+      }
     });
   });
+});
+
+ipcMain.handle('grpc:cancel', async (event, key) => {
+  const call = activeCalls.get(key);
+  if (call) {
+    call.cancel();
+    activeCalls.delete(key);
+    return { success: true };
+  }
+  return { success: false, error: 'no active call found' };
 });
 
 ipcMain.handle('registry:list', async () => {
@@ -466,5 +531,5 @@ ipcMain.handle('dialog:authorizeDrop', async (event, filePath) => {
 }
 
 if (process.env.NODE_ENV === 'test') {
-  module.exports = { readRegistry, writeRegistry };
+  module.exports = { readRegistry, writeRegistry, generateGibberish };
 }

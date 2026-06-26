@@ -39,6 +39,7 @@ export default function App() {
   });
   const [dragActive, setDragActive] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(true);
+  const [backgroundTasks, setBackgroundTasks] = useState([]);
 
   const addLog = useCallback((text, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -52,12 +53,15 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI) return;
     const cleanupUpload = window.electronAPI.onUploadProgress((data) => {
-      if (data.total > 0) {
-        setLoadingProgress(Math.round((data.loaded / data.total) * 100));
-      }
+      const prog = data.total > 0 ? Math.round((data.loaded / data.total) * 100) : 0;
+      setLoadingProgress(prev => (prev !== null ? prog : null));
+      setBackgroundTasks(prev => prev.map(t => t.key === data.key ? { ...t, progress: prog } : t));
     });
     const cleanupDownload = window.electronAPI.onDownloadProgress((data) => {
-      setLoadingProgress(Math.round(data.loaded / 1024));
+      const isPercent = data.total > 0;
+      const prog = isPercent ? Math.round((data.loaded / data.total) * 100) : Math.round(data.loaded / 1024);
+      setLoadingProgress(prev => (prev !== null ? prog : null));
+      setBackgroundTasks(prev => prev.map(t => t.key === data.key ? { ...t, progress: isPercent ? prog : 0, loadedKb: Math.round(data.loaded / 1024), isPercent } : t));
     });
     return () => { cleanupUpload(); cleanupDownload(); };
   }, []);
@@ -84,7 +88,7 @@ export default function App() {
         addLog(res.cached ? 'using cached grpc connection' : 'connected to grpc server', 'success');
         try {
           addLog('fetching keys from server...', 'info');
-          const keys = await window.electronAPI.getKeys();
+          const keys = await window.electronAPI.getKeys(token);
           setRegistry(keys);
           addLog(`successfully loaded ${keys.length} keys from server`, 'success');
         } catch (err) {
@@ -103,7 +107,7 @@ export default function App() {
     } finally {
       setIsConnecting(false);
     }
-  }, [grpcAddress, addLog, fetchRegistry]);
+  }, [grpcAddress, token, addLog, fetchRegistry]);
 
   const viewKeyDirectly = useCallback(async (keyEntry, currentToken) => {
     if (!keyEntry) return;
@@ -117,7 +121,7 @@ export default function App() {
       const type = detectViewerType(keyEntry.mimeType);
 
       if (keyEntry.size <= 50 * 1024 * 1024 && (type === 'image' || type === 'text' || type === 'pdf')) {
-         const res = await window.electronAPI.getMemory({ key: keyEntry.key, token: currentToken });
+         const res = await window.electronAPI.getMemory({ key: keyEntry.key, token: currentToken, size: keyEntry.size, mimeType: keyEntry.mimeType });
          let url = '';
          let textContent = '';
 
@@ -160,6 +164,7 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingProgress(null);
+      setBackgroundTasks(prev => prev.filter(t => t.key !== keyEntry.key));
     }
   }, [addLog]);
 
@@ -168,8 +173,7 @@ export default function App() {
     setViewerData(null);
     setToken('');
     setMobileSidebarOpen(false);
-    await viewKeyDirectly(entry, '');
-  }, [viewKeyDirectly]);
+  }, []);
 
 
 
@@ -194,7 +198,7 @@ export default function App() {
       setLoadingText(`downloading '${selectedKey.key}'...`);
 
       const res = await window.electronAPI.getSave({
-        key: selectedKey.key, token, savePath: saveDialog.filePath
+        key: selectedKey.key, token, savePath: saveDialog.filePath, size: selectedKey.size, mimeType: selectedKey.mimeType
       });
       addLog(`saved to: ${res.filePath}`, 'success');
     } catch (err) {
@@ -202,8 +206,40 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingProgress(null);
+      if (selectedKey) {
+        setBackgroundTasks(prev => prev.filter(t => t.key !== selectedKey.key));
+      }
     }
   }, [selectedKey, token, addLog]);
+
+  const moveToBackground = useCallback(() => {
+    const currentKey = selectedKey?.key || uploadForm.key;
+    const taskType = loadingText.includes('uploading') ? 'upload' : 'download';
+    
+    setBackgroundTasks(prev => {
+      if (prev.some(t => t.key === currentKey)) return prev;
+      return [...prev, {
+        key: currentKey,
+        type: taskType,
+        progress: loadingProgress || 0,
+        loadingText: loadingText,
+        size: selectedKey?.size || 0
+      }];
+    });
+    setLoading(false);
+    setLoadingProgress(null);
+  }, [selectedKey, uploadForm, loadingText, loadingProgress]);
+
+  const handleCancelTask = useCallback(async (taskKey) => {
+    if (!window.electronAPI) return;
+    try {
+      await window.electronAPI.cancelCall(taskKey);
+      addLog(`cancelled task for key '${taskKey}'`, 'info');
+    } catch (err) {
+      addLog(`failed to cancel task: ${err.message}`, 'error');
+    }
+    setBackgroundTasks(prev => prev.filter(t => t.key !== taskKey));
+  }, [addLog]);
 
   const selectUploadFile = useCallback(async () => {
     const res = await window.electronAPI.openFileDialog({ properties: ['openFile'] });
@@ -274,6 +310,7 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingProgress(null);
+      setBackgroundTasks(prev => prev.filter(t => t.key !== uploadForm.key));
     }
   }, [uploadForm, addLog, handleSelectKey]);
 
@@ -563,17 +600,35 @@ export default function App() {
                       <div className="text-center w-full">
                         <p className="text-m3-on-surface text-sm font-semibold tracking-wide">{loadingText}</p>
                         {loadingProgress !== null && (
-                          <div className="w-56 mt-4">
+                          <div className="w-56 mt-4 mx-auto">
                             <div className="w-full h-2 bg-m3-surface-variant rounded-full overflow-hidden shadow-inner">
                               <div className="h-full bg-m3-primary transition-all duration-300 ease-out relative overflow-hidden" style={{ width: `${loadingProgress}%` }}>
                                 <div className="absolute inset-0 bg-white/20 w-full animate-pulse"></div>
                               </div>
                             </div>
                             <div className="text-xs font-mono text-m3-on-surface-variant mt-2 text-center bg-m3-surface px-3 py-1 rounded-full inline-block shadow-sm">
-                              {loadingText.includes('downloading') ? `${loadingProgress} KB` : `${loadingProgress}%`}
+                              {loadingProgress}%
                             </div>
                           </div>
                         )}
+                        <div className="flex gap-3 justify-center mt-6">
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={moveToBackground}
+                            className="bg-m3-secondary-container hover:bg-m3-secondary-container/80 text-m3-on-secondary-container rounded-full px-4 py-1.5 text-xs font-semibold transition-colors"
+                          >
+                            Background
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleCancelTask(selectedKey?.key || uploadForm.key)}
+                            className="bg-m3-error-container hover:bg-m3-error-container/80 text-m3-error rounded-full px-4 py-1.5 text-xs font-semibold transition-colors"
+                          >
+                            Cancel
+                          </motion.button>
+                        </div>
                       </div>
                     </motion.div>
                   ) : viewerData ? (
@@ -757,6 +812,43 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Background Tasks Widget */}
+      {backgroundTasks.length > 0 && (
+        <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-3 w-80 max-h-96 overflow-y-auto bg-m3-surface-container-high border border-m3-outline-variant/30 rounded-3xl p-4 shadow-2xl">
+          <div className="flex justify-between items-center border-b border-m3-outline-variant/10 pb-2">
+            <span className="text-xs font-bold text-m3-on-surface uppercase tracking-wider">Active Tasks ({backgroundTasks.length})</span>
+          </div>
+          <div className="flex flex-col gap-3">
+            {backgroundTasks.map(task => (
+              <div key={task.key} className="flex flex-col gap-1.5 p-2 rounded-2xl bg-m3-surface/40 border border-m3-outline-variant/10">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-xs font-semibold text-m3-on-surface truncate flex-1">{task.key}</span>
+                  <button 
+                    onClick={() => handleCancelTask(task.key)}
+                    className="p-1 hover:bg-m3-error-container hover:text-m3-error rounded-full transition-colors shrink-0 text-m3-on-surface-variant"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div className="text-[10px] text-m3-on-surface-variant font-medium">
+                  {task.type === 'upload' ? 'Uploading' : 'Downloading'}...
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-m3-surface-variant rounded-full overflow-hidden shadow-inner">
+                    <div 
+                      className="h-full bg-m3-primary transition-all duration-300 ease-out" 
+                      style={{ width: `${task.progress}%` }} 
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-m3-on-surface-variant shrink-0">
+                    {task.isPercent === false ? `${task.loadedKb} KB` : `${task.progress}%`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
