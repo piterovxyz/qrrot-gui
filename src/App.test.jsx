@@ -11,7 +11,7 @@ const mockElectronAPI = {
   getRegistry: vi.fn(),
   connect: vi.fn(),
 
-  del: vi.fn(),
+
   removeRegistry: vi.fn(),
   getMemory: vi.fn(),
   saveFileDialog: vi.fn(),
@@ -39,7 +39,7 @@ beforeEach(() => {
 
   mockElectronAPI.connect.mockResolvedValue({ success: true, cached: false });
 
-  mockElectronAPI.del.mockResolvedValue();
+
   mockElectronAPI.removeRegistry.mockResolvedValue([
     { key: 'test2', mimeType: 'image/png', size: 2048 },
     { key: 'test3', mimeType: 'video/mp4', size: 1048576 }
@@ -137,39 +137,8 @@ describe('App Component', () => {
     // Buttons should appear
     expect(screen.getByRole('button', { name: /decrypt/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
-
-    expect(screen.getByTitle('Delete')).toBeInTheDocument();
   });
 
-
-  it('deletes an item', async () => {
-    await setupConnected();
-
-    await waitFor(() => {
-      expect(screen.getByText('test1')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('test1'));
-
-    await waitFor(() => {
-      expect(mockElectronAPI.getMemory).toHaveBeenCalledWith({ key: 'test1', token: '' });
-    });
-
-    const deleteBtn = screen.getByTitle('Delete');
-    fireEvent.click(deleteBtn);
-
-    expect(window.confirm).toHaveBeenCalledWith("delete 'test1'?");
-
-    await waitFor(() => {
-      expect(mockElectronAPI.del).toHaveBeenCalledWith({ key: 'test1', token: '' });
-      expect(mockElectronAPI.removeRegistry).toHaveBeenCalledWith('test1');
-    });
-
-    // Ensure the item is removed from view
-    await waitFor(() => {
-      expect(screen.queryByText('test1')).not.toBeInTheDocument();
-    });
-  });
 
   it('handles decryption (memory viewing) with token', async () => {
     await setupConnected();

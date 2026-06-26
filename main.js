@@ -274,16 +274,6 @@ ipcMain.handle('grpc:keys', async (event, token) => {
 });
 
 
-ipcMain.handle('grpc:del', async (event, args) => {
-  return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    grpcClient.del({ key: args.key, token: args.token || "" }, (err, res) => {
-      if (err) return reject(err);
-      resolve(res.status);
-    });
-  });
-});
-
 ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => {
   if (!grpcClient) throw new Error('not connected to grpc server');
   if (!allowedFilePaths.has(filePath)) throw new Error('Unauthorized file path');

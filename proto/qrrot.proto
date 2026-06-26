@@ -7,7 +7,6 @@ option go_package = "qrrot/api/proto/v1;qrrotv1";
 service QrrotService {
   rpc Get (GetRequest) returns (stream GetResponse);
   rpc Put (stream PutRequest) returns (PutResponse);
-  rpc Del (DelRequest) returns (DelResponse);
   rpc Keys (KeysRequest) returns (stream KeysResponse);
 }
 
@@ -37,14 +36,6 @@ message PutRequest {
 }
 
 message PutResponse {
-  string status = 1;
-}
-
-message DelRequest {
-  string key = 1;
-}
-
-message DelResponse {
   string status = 1;
 }
 
