@@ -41,6 +41,7 @@ message PutResponse {
 
 
 message KeysRequest {
+  string token = 1;
 }
 
 message KeyInfo {

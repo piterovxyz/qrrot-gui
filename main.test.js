@@ -150,3 +150,29 @@ describe('grpc:connect handler', () => {
     spy.mockRestore();
   });
 });
+
+describe('generateGibberish utility', () => {
+  it('should generate printable ASCII chars for text mime types', () => {
+    const data = main.generateGibberish(100, 'text/plain');
+    expect(data.length).toBe(100);
+    const str = data.toString('utf8');
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      expect(code).toBeGreaterThanOrEqual(9);
+      expect(code).toBeLessThanOrEqual(126);
+    }
+  });
+
+  it('should generate random binary bytes for non-text mime types', () => {
+    const data = main.generateGibberish(100, 'image/png');
+    expect(data.length).toBe(100);
+    let nonTextCount = 0;
+    for (let i = 0; i < data.length; i++) {
+      const byte = data[i];
+      if (byte > 126 || (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13)) {
+        nonTextCount++;
+      }
+    }
+    expect(nonTextCount).toBeGreaterThan(0);
+  });
+});
