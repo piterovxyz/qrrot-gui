@@ -58,7 +58,3 @@ npm run dist
 └── build/
     └── icon.png     # app icon
 ```
-
-## license
-
-MIT
