@@ -108,81 +108,82 @@ if (app) {
   app.whenReady().then(() => {
     protocol.handle('qrrot-media', async (request) => {
       const urlObj = new URL(request.url);
-      
+
       if (urlObj.host === 'stream') {
         const key = decodeURIComponent(urlObj.pathname.slice(1));
-        const token = urlObj.searchParams.get('token');
+        const rawToken = urlObj.searchParams.get('token') || '';
+        const token = rawToken.replace(/[\x00-\x1f]/g, '');
 
-      if (!grpcClient) {
-        return new Response('Not connected', { status: 500 });
-      }
+        if (!grpcClient) {
+          return new Response('Not connected', { status: 500 });
+        }
 
-      let responseMimeType = 'application/octet-stream';
-      let firstChunkReceived = false;
-      let resolveResponse;
+        let responseMimeType = 'application/octet-stream';
+        let firstChunkReceived = false;
+        let resolveResponse;
+        let grpcCall = null;
 
-      const responsePromise = new Promise((resolve) => {
-        resolveResponse = resolve;
-      });
+        const responsePromise = new Promise((resolve) => {
+          resolveResponse = resolve;
+        });
 
-      const readable = new ReadableStream({
-        start(controller) {
-          const call = grpcClient.get({ key, token });
-          this.call = call;
+        const readable = new ReadableStream({
+          start(controller) {
+            grpcCall = grpcClient.get({ key, token });
 
-          call.on('data', (res) => {
-            if (res.metadata) {
-              responseMimeType = res.metadata.mime_type;
-            } else if (res.chunk) {
+            grpcCall.on('data', (res) => {
+              if (res.metadata) {
+                responseMimeType = res.metadata.mime_type;
+              } else if (res.chunk) {
+                if (!firstChunkReceived) {
+                  firstChunkReceived = true;
+                  resolveResponse(new Response(readable, {
+                    headers: { 'Content-Type': responseMimeType }
+                  }));
+                }
+
+                controller.enqueue(res.chunk);
+
+                if (controller.desiredSize <= 0) {
+                  grpcCall.pause();
+                }
+              }
+            });
+
+            grpcCall.on('end', () => {
               if (!firstChunkReceived) {
-                firstChunkReceived = true;
                 resolveResponse(new Response(readable, {
                   headers: { 'Content-Type': responseMimeType }
                 }));
               }
+              controller.close();
+            });
 
-              controller.enqueue(res.chunk);
-
-              if (controller.desiredSize <= 0) {
-                call.pause();
+            grpcCall.on('error', (err) => {
+              console.error('grpc get error:', err);
+              if (!firstChunkReceived) {
+                resolveResponse(new Response('Error', { status: 500 }));
               }
+              controller.error(err);
+            });
+          },
+          pull() {
+            if (grpcCall) {
+              grpcCall.resume();
             }
-          });
-
-          call.on('end', () => {
-            if (!firstChunkReceived) {
-              resolveResponse(new Response(readable, {
-                headers: { 'Content-Type': responseMimeType }
-              }));
+          },
+          cancel() {
+            if (grpcCall) {
+              grpcCall.cancel();
             }
-            controller.close();
-          });
-
-          call.on('error', (err) => {
-            console.error('grpc get error:', err);
-            if (!firstChunkReceived) {
-              resolveResponse(new Response('Error', { status: 500 }));
-            }
-            controller.error(err);
-          });
-        },
-        pull(controller) {
-          if (this.call) {
-            this.call.resume();
           }
-        },
-        cancel() {
-          if (this.call) {
-            this.call.cancel();
-          }
-        }
-      });
+        });
 
-      return responsePromise;
-    }
+        return responsePromise;
+      }
 
-    return new Response('Not found', { status: 404 });
-  });
+      return new Response('Not found', { status: 404 });
+    });
 
   createWindow();
 
@@ -315,29 +316,30 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
   const totalSize = fileStats.size;
 
   return new Promise((resolve, reject) => {
+    const readStream = fs.createReadStream(filePath, { highWaterMark: 64 * 1024 });
+
     const call = grpcClient.put((err, res) => {
       activeCalls.delete(key);
       if (err) {
-        if (readStream) readStream.destroy();
+        readStream.destroy();
         return reject(err);
       }
       resolve({ status: res.status, size: totalSize });
     });
 
-    activeCalls.set(key, call);
+    activeCalls.set(key, { call, readStream });
 
     call.write({
       metadata: { key, mime_type: mimeType },
       token: token
     });
 
-    const readStream = fs.createReadStream(filePath, { highWaterMark: 64 * 1024 });
     let bytesUploaded = 0;
 
     readStream.on('data', (chunk) => {
       bytesUploaded += chunk.length;
       mainWindow.webContents.send('upload-progress', { key, loaded: bytesUploaded, total: totalSize });
-      
+
       call.write({
         chunk: chunk,
         token: token
@@ -378,6 +380,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
     let writeStream = null;
     let responseMimeType = mimeType || '';
     let bytesDownloaded = 0;
+    const pendingChunks = [];
 
     call.on('data', (res) => {
       if (res.metadata) {
@@ -388,11 +391,17 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
           call.cancel();
           reject(err);
         });
+        // flush any chunks that arrived before metadata
+        while (pendingChunks.length > 0) {
+          writeStream.write(pendingChunks.shift());
+        }
       } else if (res.chunk) {
         bytesDownloaded += res.chunk.length;
         mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
         if (writeStream) {
           writeStream.write(res.chunk);
+        } else {
+          pendingChunks.push(res.chunk);
         }
       }
     });
@@ -402,6 +411,15 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
       if (writeStream) {
         writeStream.end(() => {
           resolve({ filePath: savePath, mimeType: responseMimeType, size: bytesDownloaded });
+        });
+      } else if (pendingChunks.length > 0) {
+        // metadata never arrived but we got chunks — write them out
+        writeStream = fs.createWriteStream(savePath);
+        while (pendingChunks.length > 0) {
+          writeStream.write(pendingChunks.shift());
+        }
+        writeStream.end(() => {
+          resolve({ filePath: savePath, mimeType: responseMimeType || 'application/octet-stream', size: bytesDownloaded });
         });
       } else {
         reject(new Error('key not found or invalid response'));
@@ -473,9 +491,17 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token, size, mimeType }) 
 });
 
 ipcMain.handle('grpc:cancel', async (event, key) => {
-  const call = activeCalls.get(key);
-  if (call) {
-    call.cancel();
+  const entry = activeCalls.get(key);
+  if (entry) {
+    // entry can be a plain grpc call or { call, readStream } for uploads
+    if (entry.call) {
+      entry.call.cancel();
+      if (entry.readStream) {
+        entry.readStream.destroy();
+      }
+    } else {
+      entry.cancel();
+    }
     activeCalls.delete(key);
     return { success: true };
   }

@@ -6,11 +6,12 @@ import {
 
 // Helper: Format bytes
 export function formatBytes(bytes, decimals = 2) {
-  if (!bytes || bytes === 0) return '0 bytes';
+  if (bytes == null || isNaN(bytes) || bytes === 0) return '0 bytes';
+  if (bytes < 0) return '0 bytes';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['bytes', 'kb', 'mb', 'gb'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['bytes', 'kb', 'mb', 'gb', 'tb', 'pb'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
@@ -28,7 +29,9 @@ export function getIcon(mimeType) {
 
 // Helper: Detect mime
 export function detectMimeType(fileName) {
-  const ext = fileName.split('.').pop().toLowerCase();
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex === -1 || dotIndex === fileName.length - 1) return 'application/octet-stream';
+  const ext = fileName.slice(dotIndex + 1).toLowerCase();
   const map = {
     // Images
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',

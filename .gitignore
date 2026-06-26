@@ -4,3 +4,4 @@ dist/
 *.log
 .idea/
 release/
+test_registry.json
