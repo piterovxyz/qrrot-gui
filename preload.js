@@ -2,12 +2,11 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   connect: (address) => ipcRenderer.invoke('grpc:connect', address),
-  exists: (key) => ipcRenderer.invoke('grpc:exists', key),
-  del: (key) => ipcRenderer.invoke('grpc:del', key),
+  del: (args) => ipcRenderer.invoke('grpc:del', args),
   put: (args) => ipcRenderer.invoke('grpc:put', args),
   getSave: (args) => ipcRenderer.invoke('grpc:get:save', args),
   getMemory: (args) => ipcRenderer.invoke('grpc:get:memory', args),
-  getKeys: () => ipcRenderer.invoke('grpc:keys'),
+  getKeys: (token) => ipcRenderer.invoke('grpc:keys', token),
 
   getRegistry: () => ipcRenderer.invoke('registry:list'),
   addRegistry: (entry) => ipcRenderer.invoke('registry:add', entry),

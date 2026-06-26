@@ -8,7 +8,6 @@ service QrrotService {
   rpc Get (GetRequest) returns (stream GetResponse);
   rpc Put (stream PutRequest) returns (PutResponse);
   rpc Del (DelRequest) returns (DelResponse);
-  rpc Exists (ExistsRequest) returns (ExistsResponse);
   rpc Keys (KeysRequest) returns (stream KeysResponse);
 }
 
@@ -49,13 +48,6 @@ message DelResponse {
   string status = 1;
 }
 
-message ExistsRequest {
-  string key = 1;
-}
-
-message ExistsResponse {
-  bool exists = 1;
-}
 
 message KeysRequest {
 }

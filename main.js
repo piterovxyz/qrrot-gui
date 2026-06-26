@@ -240,11 +240,11 @@ ipcMain.handle('grpc:connect', async (event, address) => {
   }
 });
 
-ipcMain.handle('grpc:keys', async (event) => {
+ipcMain.handle('grpc:keys', async (event, token) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
 
-    const call = grpcClient.keys({});
+    const call = grpcClient.keys({ token: token || "" });
     const keys = [];
 
     call.on('data', (res) => {
@@ -273,20 +273,11 @@ ipcMain.handle('grpc:keys', async (event) => {
   });
 });
 
-ipcMain.handle('grpc:exists', async (event, key) => {
-  return new Promise((resolve, reject) => {
-    if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    grpcClient.exists({ key }, (err, res) => {
-      if (err) return reject(err);
-      resolve(res.exists);
-    });
-  });
-});
 
-ipcMain.handle('grpc:del', async (event, key) => {
+ipcMain.handle('grpc:del', async (event, args) => {
   return new Promise((resolve, reject) => {
     if (!grpcClient) return reject(new Error('not connected to grpc server'));
-    grpcClient.del({ key }, (err, res) => {
+    grpcClient.del({ key: args.key, token: args.token || "" }, (err, res) => {
       if (err) return reject(err);
       resolve(res.status);
     });
