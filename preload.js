@@ -2,7 +2,6 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   connect: (address) => ipcRenderer.invoke('grpc:connect', address),
-  del: (args) => ipcRenderer.invoke('grpc:del', args),
   put: (args) => ipcRenderer.invoke('grpc:put', args),
   getSave: (args) => ipcRenderer.invoke('grpc:get:save', args),
   getMemory: (args) => ipcRenderer.invoke('grpc:get:memory', args),
