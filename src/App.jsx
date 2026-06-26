@@ -170,7 +170,12 @@ export default function App() {
 
   const handleSelectKey = useCallback(async (entry) => {
     setSelectedKey(entry);
-    setViewerData(null);
+    setViewerData(prev => {
+      if (prev?.url && prev.url.startsWith('blob:')) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
     setToken('');
     setMobileSidebarOpen(false);
   }, []);
@@ -268,12 +273,12 @@ export default function App() {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      await window.electronAPI.authorizeDrop(file);
-      const filePath = file.path;
+      const authorized = await window.electronAPI.authorizeDrop(file);
+      if (!authorized) return;
       const fileName = file.name;
       const mimeType = detectMimeType(fileName);
       const keyName = fileName.replace(/\.[^/.]+$/, '');
-      setUploadForm(prev => ({ ...prev, filePath, fileName, key: keyName, mimeType }));
+      setUploadForm(prev => ({ ...prev, filePath: file.path || fileName, fileName, key: keyName, mimeType }));
       setShowUploadPanel(true);
     }
   }, []);

@@ -34,7 +34,6 @@
     "clsx": "^2.1.1",
     "electron": "42.4.1",
     "electron-builder": "^24.13.3",
-    "jest": "^30.4.2",
     "jsdom": "^29.1.1",
     "lucide-react": "^1.21.0",
     "postcss": "^8.5.15",
