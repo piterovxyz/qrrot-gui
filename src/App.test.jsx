@@ -165,6 +165,12 @@ describe('App Component', () => {
     const decryptBtn = screen.getByRole('button', { name: /decrypt/i });
     fireEvent.click(decryptBtn);
 
+    // Modal opens, wait for modal decrypt button and click it
+    await waitFor(() => {
+      expect(screen.getByTestId('modal-decrypt-btn')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('modal-decrypt-btn'));
+
     await waitFor(() => {
       expect(mockElectronAPI.getMemory).toHaveBeenLastCalledWith({ key: 'test1', token: 'mysecrettoken', size: 100, mimeType: 'text/plain' });
     });
