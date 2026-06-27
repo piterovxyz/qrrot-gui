@@ -909,7 +909,7 @@ export default function App() {
                             type="password" value={uploadForm.token}
                             onChange={(e) => setUploadForm(prev => ({ ...prev, token: e.target.value }))}
                             placeholder="Optional AES token"
-                            className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all"
+                            className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all font-mono"
                           />
                         </div>
                         <motion.button
