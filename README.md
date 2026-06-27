@@ -2,6 +2,8 @@
 
 desktop gRPC client for the [qrrot](https://github.com/piterovxyz/qrrot) encrypted key-value database.
 
+![qrrot gui screenshot](assets/screenshot.png)
+
 ## features
 
 - connect to any qrrot server via `grpc://` or `grpcs://`
