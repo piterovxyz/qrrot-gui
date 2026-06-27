@@ -6,6 +6,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Google Sans"', '"Product Sans"', 'Outfit', 'Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         'm3-surface': '#09090B',
         'm3-surface-container': '#121214',

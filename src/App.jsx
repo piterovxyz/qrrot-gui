@@ -890,7 +890,7 @@ export default function App() {
                               type="text" required value={uploadForm.key}
                               onChange={(e) => setUploadForm(prev => ({ ...prev, key: e.target.value }))}
                               placeholder="e.g. docs"
-                              className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all"
+                              className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 h-11 py-0 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all"
                             />
                           </div>
                           <div className="flex-1 flex flex-col gap-2">
@@ -899,7 +899,7 @@ export default function App() {
                               type="text" required value={uploadForm.mimeType}
                               onChange={(e) => setUploadForm(prev => ({ ...prev, mimeType: e.target.value }))}
                               placeholder="image/png"
-                              className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all"
+                              className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 h-11 py-0 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all"
                             />
                           </div>
                         </div>
@@ -909,7 +909,7 @@ export default function App() {
                             type="password" value={uploadForm.token}
                             onChange={(e) => setUploadForm(prev => ({ ...prev, token: e.target.value }))}
                             placeholder="Optional AES token"
-                            className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all font-mono"
+                            className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 h-11 py-0 text-sm outline-none focus:ring-2 focus:ring-m3-primary shadow-inner transition-all font-mono"
                           />
                         </div>
                         <motion.button
@@ -948,7 +948,7 @@ export default function App() {
                         <input
                           type="password"
                           autoFocus
-                          className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-m3-primary focus:border-transparent transition-all shadow-inner font-mono"
+                          className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-5 h-11 py-0 text-sm outline-none focus:ring-2 focus:ring-m3-primary focus:border-transparent transition-all shadow-inner font-mono"
                           placeholder="Optional AES token"
                           value={promptTokenValue}
                           onChange={(e) => setPromptTokenValue(e.target.value)}
