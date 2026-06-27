@@ -446,8 +446,13 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-m3-surface text-m3-on-surface font-sans overflow-hidden select-none relative" onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}>
-      {/* Noise filter overlay to break up color banding and add rich texture */}
-      <div className="absolute inset-0 opacity-[0.015] pointer-events-none bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E')] z-50"></div>
+      {/* Base64 noise overlay to break up color banding and add a velvety premium feel */}
+      <div 
+        className="absolute inset-0 opacity-[0.015] pointer-events-none z-50"
+        style={{
+          backgroundImage: 'url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iNCIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZSkiLz48L3N2Zz4=")'
+        }}
+      />
 
       <AnimatePresence mode="wait">
         {!connected ? (
@@ -457,11 +462,12 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 280, damping: 32 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-m3-surface drag-region overflow-hidden"
+            className="absolute inset-0 z-50 flex items-center justify-center drag-region overflow-hidden"
+            style={{
+              backgroundColor: '#09090B',
+              backgroundImage: 'radial-gradient(circle at 30% 30%, rgba(180, 60, 0, 0.18) 0%, rgba(100, 30, 0, 0.04) 45%, transparent 75%), radial-gradient(circle at 70% 70%, rgba(130, 30, 0, 0.18) 0%, rgba(80, 15, 0, 0.04) 45%, transparent 75%)'
+            }}
           >
-            {/* Ambient deep dark orange glow blobs */}
-            <div className="absolute top-1/4 left-1/4 w-[40rem] h-[40rem] bg-gradient-to-tr from-[#9e3a00]/15 to-[#521c00]/5 rounded-full blur-[160px] pointer-events-none animate-pulse-subtle"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-[40rem] h-[40rem] bg-gradient-to-bl from-[#7a2800]/15 to-[#3b1200]/5 rounded-full blur-[160px] pointer-events-none animate-pulse-subtle" style={{ animationDelay: '1s' }}></div>
 
             <div className="w-full max-w-[400px] bg-m3-surface-container/70 backdrop-blur-xl rounded-3xl p-8 flex flex-col gap-8 shadow-2xl no-drag-region border border-m3-outline-variant/20 relative z-10">
               <div className="flex flex-col items-center gap-3 text-center">
@@ -669,7 +675,14 @@ export default function App() {
                 )}
               </div>
 
-              <div className="flex-1 p-4 md:p-6 flex items-center justify-center overflow-hidden min-h-0 relative bg-m3-surface">
+              <div 
+                className="flex-1 p-4 md:p-6 flex items-center justify-center overflow-hidden min-h-0 relative bg-m3-surface"
+                style={{
+                  backgroundImage: !selectedKey 
+                    ? 'radial-gradient(circle at 50% 50%, rgba(180, 60, 0, 0.08) 0%, rgba(100, 30, 0, 0.02) 40%, transparent 70%)'
+                    : 'none'
+                }}
+              >
                 <AnimatePresence mode="wait">
                   {loading ? (
                     <motion.div 
@@ -780,15 +793,12 @@ export default function App() {
                       key="empty"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="text-center flex flex-col items-center gap-6 relative"
+                      className="text-center flex flex-col items-center gap-6"
                     >
-                      {/* Premium background blur blob in empty state */}
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] bg-gradient-to-r from-[#9e3a00]/8 to-[#521c00]/2 rounded-full blur-[150px] pointer-events-none animate-pulse-subtle"></div>
-                      
-                      <div className="w-32 h-32 rounded-full bg-m3-surface-container-high flex items-center justify-center text-m3-surface-variant shadow-inner border border-m3-outline-variant/10 relative z-10">
+                      <div className="w-32 h-32 rounded-full bg-m3-surface-container-high flex items-center justify-center text-m3-surface-variant shadow-inner border border-m3-outline-variant/10">
                         <Box size={48} />
                       </div>
-                      <p className="text-sm font-medium text-m3-on-surface-variant max-w-[240px] leading-relaxed relative z-10">
+                      <p className="text-sm font-medium text-m3-on-surface-variant max-w-[240px] leading-relaxed">
                         Select an item to preview or upload a new file
                       </p>
                     </motion.div>
@@ -908,17 +918,8 @@ export default function App() {
                       animate={{ scale: 1, y: 0 }}
                       exit={{ scale: 0.9, y: 15 }}
                       transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                      className="w-full max-w-[380px] bg-m3-surface-container/90 backdrop-blur-xl rounded-3xl p-6 flex flex-col gap-5 shadow-2xl border border-m3-outline-variant/30 relative"
+                      className="w-full max-w-[340px] bg-m3-surface-container/90 backdrop-blur-xl rounded-3xl p-6 flex flex-col gap-5 shadow-2xl border border-m3-outline-variant/30 relative"
                     >
-                      <div className="flex flex-col gap-1.5">
-                        <h3 className="text-lg font-semibold text-m3-on-surface tracking-tight">
-                          Decrypt key:
-                        </h3>
-                        <p className="text-xs text-m3-primary font-mono truncate px-2.5 py-1 bg-m3-primary-container/20 rounded-md border border-m3-primary/10 select-all">
-                          {promptKey?.key}
-                        </p>
-                      </div>
-
                       <div className="flex flex-col gap-2">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-m3-on-surface-variant px-1">
                           Encryption Token
@@ -938,7 +939,7 @@ export default function App() {
                         />
                       </div>
 
-                      <div className="flex flex-col gap-2 mt-2">
+                      <div className="flex flex-col gap-2 mt-1">
                         <div className="flex gap-2">
                           <motion.button
                             data-testid="modal-decrypt-btn"
@@ -959,14 +960,6 @@ export default function App() {
                             Skip
                           </motion.button>
                         </div>
-                        <motion.button
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                          onClick={() => setPromptOpen(false)}
-                          className="w-full bg-transparent hover:bg-m3-surface-variant/30 text-m3-on-surface-variant rounded-full py-2 text-xs font-medium transition-colors"
-                        >
-                          Cancel
-                        </motion.button>
                       </div>
                     </motion.div>
                   </motion.div>
