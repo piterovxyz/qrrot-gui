@@ -446,13 +446,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
         writeStream.destroy();
       }
       if (err.message && err.message.includes('invalid token')) {
-        try {
-          const gibberishData = generateGibberish(size || 1024, responseMimeType || 'application/octet-stream');
-          await fs.promises.writeFile(savePath, gibberishData);
-          resolve({ filePath: savePath, mimeType: responseMimeType || 'application/octet-stream', size: gibberishData.length, isGibberish: true });
-        } catch (writeErr) {
-          reject(writeErr);
-        }
+        reject(new Error('Invalid decryption token'));
       } else {
         reject(err);
       }
@@ -502,8 +496,7 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token, size, mimeType }) 
     call.on('error', (err) => {
       activeCalls.delete(key);
       if (err.message && err.message.includes('invalid token')) {
-        const gibberishData = generateGibberish(size || 1024, responseMimeType || 'application/octet-stream');
-        resolve({ mimeType: responseMimeType || 'application/octet-stream', size: gibberishData.length, data: gibberishData, isGibberish: true });
+        reject(new Error('Invalid decryption token'));
       } else {
         reject(err);
       }

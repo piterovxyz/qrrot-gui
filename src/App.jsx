@@ -86,6 +86,7 @@ export default function App() {
   const [promptKey, setPromptKey] = useState(null);
   const [promptAction, setPromptAction] = useState(null); // 'view' | 'save'
   const [promptTokenValue, setPromptTokenValue] = useState('');
+  const [decryptError, setDecryptError] = useState('');
 
   const addLog = useCallback((text, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -163,6 +164,7 @@ export default function App() {
       setLoadingProgress(0);
       setLoadingText(`decrypting '${keyEntry.key}'...`);
       setViewerData(null);
+      setDecryptError('');
 
       const type = detectViewerType(keyEntry.mimeType);
 
@@ -206,6 +208,7 @@ export default function App() {
          addLog(`streaming '${keyEntry.key}' via local proxy`, 'success');
       }
     } catch (err) {
+      setDecryptError(err.message || 'decryption failed');
       addLog(`decrypt failed: ${err.message}`, 'error');
     } finally {
       setLoading(false);
@@ -223,6 +226,7 @@ export default function App() {
       return null;
     });
     setToken('');
+    setDecryptError('');
     setMobileSidebarOpen(false);
     
     // Trigger prompt immediately on selection
@@ -787,6 +791,23 @@ export default function App() {
                           </div>
                         </div>
                       )}
+                    </motion.div>
+                  ) : decryptError ? (
+                    <motion.div 
+                      key="error"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-center flex flex-col items-center gap-5 max-w-sm bg-m3-error-container/20 border border-m3-error/20 p-8 rounded-3xl"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-m3-error-container flex items-center justify-center text-m3-error mb-1 shadow-lg">
+                        <XCircle size={32} />
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-m3-error">Decryption Failed</p>
+                        <p className="text-xs text-m3-on-surface-variant mt-2 leading-relaxed font-medium">
+                          {decryptError}
+                        </p>
+                      </div>
                     </motion.div>
                   ) : (
                     <motion.div 

@@ -218,4 +218,31 @@ describe('App Component', () => {
       expect(mockElectronAPI.addRegistry).toHaveBeenCalled();
     });
   });
+
+  it('handles decryption failure with invalid token', async () => {
+    await setupConnected();
+
+    await waitFor(() => {
+      expect(screen.getByText('test1')).toBeInTheDocument();
+    });
+
+    // Click an item -> triggers modal immediately
+    fireEvent.click(screen.getByText('test1'));
+
+    // Wait for the modal input to appear and enter the token
+    const tokenInput = await screen.findByPlaceholderText(/optional/i);
+    fireEvent.change(tokenInput, { target: { value: 'wrongtoken' } });
+
+    mockElectronAPI.getMemory.mockRejectedValue(new Error('Invalid decryption token'));
+
+    // Click the Decrypt button inside the modal to submit
+    const modalDecryptBtn = screen.getByTestId('modal-decrypt-btn');
+    fireEvent.click(modalDecryptBtn);
+
+    // Look for Decryption Failed text content
+    await waitFor(() => {
+      expect(screen.getByText('Decryption Failed')).toBeInTheDocument();
+      expect(screen.getByText('Invalid decryption token')).toBeInTheDocument();
+    });
+  });
 });
