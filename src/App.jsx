@@ -224,23 +224,17 @@ export default function App() {
     });
     setToken('');
     setMobileSidebarOpen(false);
+    
+    // Trigger prompt immediately on selection
+    setPromptKey(entry);
+    setPromptAction('view');
+    setPromptTokenValue('');
+    setPromptOpen(true);
   }, []);
 
   const handleDoubleClickKey = useCallback(async (entry) => {
-    setSelectedKey(entry);
-    setViewerData(prev => {
-      if (prev?.url && prev.url.startsWith('blob:')) {
-        URL.revokeObjectURL(prev.url);
-      }
-      return null;
-    });
-    setMobileSidebarOpen(false);
-    
-    setPromptKey(entry);
-    setPromptAction('view');
-    setPromptTokenValue(token);
-    setPromptOpen(true);
-  }, [token]);
+    await handleSelectKey(entry);
+  }, [handleSelectKey]);
 
   const handleViewKey = useCallback(async () => {
     if (!selectedKey) return;
@@ -412,6 +406,28 @@ export default function App() {
     setVisibleCount(100);
   }, [searchQuery, registry]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (promptOpen) {
+          setPromptOpen(false);
+        } else if (showUploadPanel) {
+          setShowUploadPanel(false);
+        } else {
+          setSelectedKey(null);
+          setViewerData(prev => {
+            if (prev?.url && prev.url.startsWith('blob:')) {
+              URL.revokeObjectURL(prev.url);
+            }
+            return null;
+          });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [promptOpen, showUploadPanel]);
+
   const displayedRegistry = useMemo(() => {
     return filteredRegistry.slice(0, visibleCount);
   }, [filteredRegistry, visibleCount]);
@@ -429,7 +445,10 @@ export default function App() {
   }, [filteredRegistry.length]);
 
   return (
-    <div className="flex h-screen w-screen bg-m3-surface text-m3-on-surface font-sans overflow-hidden select-none" onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}>
+    <div className="flex h-screen w-screen bg-m3-surface text-m3-on-surface font-sans overflow-hidden select-none relative" onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}>
+      {/* Noise filter overlay to break up color banding and add rich texture */}
+      <div className="absolute inset-0 opacity-[0.015] pointer-events-none bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E')] z-50"></div>
+
       <AnimatePresence mode="wait">
         {!connected ? (
           <motion.div
@@ -440,9 +459,9 @@ export default function App() {
             transition={{ type: "spring", stiffness: 280, damping: 32 }}
             className="absolute inset-0 z-50 flex items-center justify-center bg-m3-surface drag-region overflow-hidden"
           >
-            {/* Ambient glow blobs */}
-            <div className="absolute top-1/4 left-1/4 w-[35rem] h-[35rem] bg-m3-primary/10 rounded-full blur-[140px] pointer-events-none animate-pulse-subtle"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-[35rem] h-[35rem] bg-m3-secondary/10 rounded-full blur-[140px] pointer-events-none animate-pulse-subtle" style={{ animationDelay: '1s' }}></div>
+            {/* Ambient deep dark orange glow blobs */}
+            <div className="absolute top-1/4 left-1/4 w-[40rem] h-[40rem] bg-gradient-to-tr from-[#9e3a00]/15 to-[#521c00]/5 rounded-full blur-[160px] pointer-events-none animate-pulse-subtle"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-[40rem] h-[40rem] bg-gradient-to-bl from-[#7a2800]/15 to-[#3b1200]/5 rounded-full blur-[160px] pointer-events-none animate-pulse-subtle" style={{ animationDelay: '1s' }}></div>
 
             <div className="w-full max-w-[400px] bg-m3-surface-container/70 backdrop-blur-xl rounded-3xl p-8 flex flex-col gap-8 shadow-2xl no-drag-region border border-m3-outline-variant/20 relative z-10">
               <div className="flex flex-col items-center gap-3 text-center">
@@ -626,17 +645,9 @@ export default function App() {
 
                 {selectedKey && (
                   <div className="flex items-center gap-2 no-drag-region overflow-x-auto hide-scrollbar pb-1 pt-1 pr-2">
-                    <div className="flex items-center gap-2 bg-m3-surface-container-high rounded-full px-4 py-2 shadow-inner border border-m3-outline-variant/20 hidden lg:flex">
-                      <span className="text-[10px] font-semibold text-m3-on-surface-variant uppercase tracking-wider">Token</span>
-                      <input
-                        type="password"
-                        className="bg-transparent border-none text-m3-on-surface text-xs font-mono outline-none w-24 placeholder-m3-on-surface-variant/50"
-                        value={token}
-                        onChange={(e) => setToken(e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </div>
+
                     <motion.button
+                      data-testid="header-decrypt-btn"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       className="bg-m3-primary hover:bg-m3-primary/90 text-m3-on-primary rounded-full px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-md shrink-0"
@@ -645,6 +656,7 @@ export default function App() {
                       <Eye size={14} /> <span className="hidden sm:inline">Decrypt</span>
                     </motion.button>
                     <motion.button
+                      data-testid="header-save-btn"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       className="bg-m3-secondary-container hover:bg-m3-secondary-container/80 text-m3-on-secondary-container rounded-full px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
@@ -771,7 +783,7 @@ export default function App() {
                       className="text-center flex flex-col items-center gap-6 relative"
                     >
                       {/* Premium background blur blob in empty state */}
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[30rem] h-[30rem] bg-m3-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse-subtle"></div>
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] bg-gradient-to-r from-[#9e3a00]/8 to-[#521c00]/2 rounded-full blur-[150px] pointer-events-none animate-pulse-subtle"></div>
                       
                       <div className="w-32 h-32 rounded-full bg-m3-surface-container-high flex items-center justify-center text-m3-surface-variant shadow-inner border border-m3-outline-variant/10 relative z-10">
                         <Box size={48} />

@@ -133,8 +133,8 @@ describe('App Component', () => {
     });
 
     // Buttons should appear
-    expect(screen.getByRole('button', { name: /decrypt/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
+    expect(screen.getByTestId('header-decrypt-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('header-save-btn')).toBeInTheDocument();
   });
 
 
@@ -145,15 +145,11 @@ describe('App Component', () => {
       expect(screen.getByText('test1')).toBeInTheDocument();
     });
 
+    // Click to select/open test1 -> triggers modal immediately
     fireEvent.click(screen.getByText('test1'));
 
-    // Header should update
-    await waitFor(() => {
-      expect(screen.getAllByText('test1').length).toBeGreaterThan(1);
-    });
-
-    // Need a token to view
-    const tokenInput = screen.getByPlaceholderText(/optional/i);
+    // Wait for the modal input to appear and enter the token
+    const tokenInput = await screen.findByPlaceholderText(/optional/i);
     fireEvent.change(tokenInput, { target: { value: 'mysecrettoken' } });
 
     mockElectronAPI.getMemory.mockResolvedValue({
@@ -162,14 +158,9 @@ describe('App Component', () => {
       size: 11
     });
 
-    const decryptBtn = screen.getByRole('button', { name: /decrypt/i });
-    fireEvent.click(decryptBtn);
-
-    // Modal opens, wait for modal decrypt button and click it
-    await waitFor(() => {
-      expect(screen.getByTestId('modal-decrypt-btn')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('modal-decrypt-btn'));
+    // Click the Decrypt button inside the modal to submit
+    const modalDecryptBtn = screen.getByTestId('modal-decrypt-btn');
+    fireEvent.click(modalDecryptBtn);
 
     await waitFor(() => {
       expect(mockElectronAPI.getMemory).toHaveBeenLastCalledWith({ key: 'test1', token: 'mysecrettoken', size: 100, mimeType: 'text/plain' });
