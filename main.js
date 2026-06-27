@@ -335,10 +335,16 @@ ipcMain.handle('grpc:put', async (event, { key, filePath, mimeType, token }) => 
     });
 
     let bytesUploaded = 0;
+    let lastProgressSent = 0;
 
     readStream.on('data', (chunk) => {
       bytesUploaded += chunk.length;
-      mainWindow.webContents.send('upload-progress', { key, loaded: bytesUploaded, total: totalSize });
+      
+      const now = Date.now();
+      if (now - lastProgressSent > 100 || bytesUploaded === totalSize) {
+        mainWindow.webContents.send('upload-progress', { key, loaded: bytesUploaded, total: totalSize });
+        lastProgressSent = now;
+      }
 
       call.write({
         chunk: chunk,
@@ -381,6 +387,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
     let responseMimeType = mimeType || '';
     let bytesDownloaded = 0;
     const pendingChunks = [];
+    let lastProgressSent = 0;
 
     call.on('data', (res) => {
       if (res.metadata) {
@@ -397,7 +404,13 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
         }
       } else if (res.chunk) {
         bytesDownloaded += res.chunk.length;
-        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
+        
+        const now = Date.now();
+        if (now - lastProgressSent > 100 || (size && bytesDownloaded === size)) {
+          mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
+          lastProgressSent = now;
+        }
+
         if (writeStream) {
           writeStream.write(res.chunk);
         } else {
@@ -408,6 +421,7 @@ ipcMain.handle('grpc:get:save', async (event, { key, token, savePath, size, mime
 
     call.on('end', () => {
       activeCalls.delete(key);
+      mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: bytesDownloaded });
       if (writeStream) {
         writeStream.end(() => {
           resolve({ filePath: savePath, mimeType: responseMimeType, size: bytesDownloaded });
@@ -456,6 +470,7 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token, size, mimeType }) 
     let responseMimeType = mimeType || '';
     let bytesDownloaded = 0;
     const chunks = [];
+    let lastProgressSent = 0;
 
     call.on('data', (res) => {
       if (res.metadata) {
@@ -463,12 +478,18 @@ ipcMain.handle('grpc:get:memory', async (event, { key, token, size, mimeType }) 
       } else if (res.chunk) {
         bytesDownloaded += res.chunk.length;
         chunks.push(res.chunk);
-        mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
+        
+        const now = Date.now();
+        if (now - lastProgressSent > 100 || (size && bytesDownloaded === size)) {
+          mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: size || 0 });
+          lastProgressSent = now;
+        }
       }
     });
 
     call.on('end', () => {
       activeCalls.delete(key);
+      mainWindow.webContents.send('download-progress', { key, loaded: bytesDownloaded, total: bytesDownloaded });
       if (chunks.length > 0 || responseMimeType) {
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const resultBuffer = Buffer.concat(chunks, totalLength);

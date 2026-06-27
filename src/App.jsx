@@ -20,6 +20,48 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
 };
 
+const RegistryItem = React.memo(({ item, isActive, onClick, onDoubleClick }) => {
+  const handleClick = useCallback(() => {
+    onClick(item);
+  }, [item, onClick]);
+
+  const handleDoubleClick = useCallback(() => {
+    onDoubleClick(item);
+  }, [item, onDoubleClick]);
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer transition-all duration-200 border border-transparent select-none active:scale-[0.98]",
+        isActive 
+          ? "bg-m3-secondary-container border-m3-secondary/20 shadow-md scale-[0.99]" 
+          : "hover:bg-m3-surface-container-high hover:border-m3-outline-variant/30 hover:scale-[1.01]"
+      )}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+    >
+      <div className={cn(
+        "w-10 h-10 flex items-center justify-center shrink-0 rounded-[14px] transition-colors duration-200 shadow-inner",
+        isActive ? "bg-m3-secondary text-m3-on-secondary" : "bg-m3-surface-variant text-m3-on-surface-variant"
+      )}>
+        {getIcon(item.mimeType)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={cn("text-[13px] font-semibold truncate", isActive ? "text-m3-on-secondary-container" : "text-m3-on-surface")}>
+          {item.key}
+        </div>
+        <div className={cn("text-[10px] flex gap-1.5 mt-0.5 font-medium", isActive ? "text-m3-on-secondary-container/80" : "text-m3-on-surface-variant")}>
+          <span>{formatBytes(item.size)}</span>
+          <span className="opacity-50">•</span>
+          <span className="truncate">{item.mimeType.split('/')[1] || 'binary'}</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+RegistryItem.displayName = 'RegistryItem';
+
 export default function App() {
   const [grpcAddress, setGrpcAddress] = useState('127.0.0.1:60945');
   const [connected, setConnected] = useState(false);
@@ -40,6 +82,10 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(true);
   const [backgroundTasks, setBackgroundTasks] = useState([]);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptKey, setPromptKey] = useState(null);
+  const [promptAction, setPromptAction] = useState(null); // 'view' | 'save'
+  const [promptTokenValue, setPromptTokenValue] = useState('');
 
   const addLog = useCallback((text, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
@@ -180,18 +226,35 @@ export default function App() {
     setMobileSidebarOpen(false);
   }, []);
 
-
+  const handleDoubleClickKey = useCallback(async (entry) => {
+    setSelectedKey(entry);
+    setViewerData(prev => {
+      if (prev?.url && prev.url.startsWith('blob:')) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
+    setMobileSidebarOpen(false);
+    
+    setPromptKey(entry);
+    setPromptAction('view');
+    setPromptTokenValue(token);
+    setPromptOpen(true);
+  }, [token]);
 
   const handleViewKey = useCallback(async () => {
     if (!selectedKey) return;
-    await viewKeyDirectly(selectedKey, token);
-  }, [selectedKey, token, viewKeyDirectly]);
+    setPromptKey(selectedKey);
+    setPromptAction('view');
+    setPromptTokenValue(token);
+    setPromptOpen(true);
+  }, [selectedKey, token]);
 
-  const handleDownloadKey = useCallback(async () => {
-    if (!selectedKey) return;
+  const downloadKeyDirectly = useCallback(async (keyEntry, currentToken) => {
+    if (!keyEntry) return;
 
     try {
-      const safePath = selectedKey.key.replace(/[<>/\\|?*":]/g, '_');
+      const safePath = keyEntry.key.replace(/[<>/\\|?*":]/g, '_');
       const saveDialog = await window.electronAPI.saveFileDialog({
         title: 'save decrypted file',
         defaultPath: safePath,
@@ -200,10 +263,10 @@ export default function App() {
 
       setLoading(true);
       setLoadingProgress(0);
-      setLoadingText(`downloading '${selectedKey.key}'...`);
+      setLoadingText(`downloading '${keyEntry.key}'...`);
 
       const res = await window.electronAPI.getSave({
-        key: selectedKey.key, token, savePath: saveDialog.filePath, size: selectedKey.size, mimeType: selectedKey.mimeType
+        key: keyEntry.key, token: currentToken, savePath: saveDialog.filePath, size: keyEntry.size, mimeType: keyEntry.mimeType
       });
       addLog(`saved to: ${res.filePath}`, 'success');
     } catch (err) {
@@ -211,15 +274,33 @@ export default function App() {
     } finally {
       setLoading(false);
       setLoadingProgress(null);
-      if (selectedKey) {
-        setBackgroundTasks(prev => prev.filter(t => t.key !== selectedKey.key));
-      }
+      setBackgroundTasks(prev => prev.filter(t => t.key !== keyEntry.key));
     }
-  }, [selectedKey, token, addLog]);
+  }, [addLog]);
+
+  const handleDownloadKey = useCallback(async () => {
+    if (!selectedKey) return;
+    setPromptKey(selectedKey);
+    setPromptAction('save');
+    setPromptTokenValue(token);
+    setPromptOpen(true);
+  }, [selectedKey, token]);
+
+  const handlePromptSubmit = useCallback(async (enteredToken) => {
+    setPromptOpen(false);
+    setToken(enteredToken);
+    
+    if (promptAction === 'view') {
+      await viewKeyDirectly(promptKey, enteredToken);
+    } else if (promptAction === 'save') {
+      await downloadKeyDirectly(promptKey, enteredToken);
+    }
+  }, [promptAction, promptKey, viewKeyDirectly, downloadKeyDirectly]);
 
   const moveToBackground = useCallback(() => {
-    const currentKey = selectedKey?.key || uploadForm.key;
     const taskType = loadingText.includes('uploading') ? 'upload' : 'download';
+    const currentKey = taskType === 'upload' ? uploadForm.key : selectedKey?.key;
+    if (!currentKey) return;
     
     setBackgroundTasks(prev => {
       if (prev.some(t => t.key === currentKey)) return prev;
@@ -228,7 +309,7 @@ export default function App() {
         type: taskType,
         progress: loadingProgress || 0,
         loadingText: loadingText,
-        size: selectedKey?.size || 0
+        size: taskType === 'upload' ? 0 : (selectedKey?.size || 0)
       }];
     });
     setLoading(false);
@@ -357,9 +438,13 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 280, damping: 32 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-m3-surface drag-region"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-m3-surface drag-region overflow-hidden"
           >
-            <div className="w-full max-w-[400px] bg-m3-surface-container rounded-3xl p-8 flex flex-col gap-8 shadow-2xl no-drag-region border border-m3-outline-variant/20">
+            {/* Ambient glow blobs */}
+            <div className="absolute top-1/4 left-1/4 w-[35rem] h-[35rem] bg-m3-primary/10 rounded-full blur-[140px] pointer-events-none animate-pulse-subtle"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-[35rem] h-[35rem] bg-m3-secondary/10 rounded-full blur-[140px] pointer-events-none animate-pulse-subtle" style={{ animationDelay: '1s' }}></div>
+
+            <div className="w-full max-w-[400px] bg-m3-surface-container/70 backdrop-blur-xl rounded-3xl p-8 flex flex-col gap-8 shadow-2xl no-drag-region border border-m3-outline-variant/20 relative z-10">
               <div className="flex flex-col items-center gap-3 text-center">
                 <motion.div 
                   initial={{ scale: 0.5, opacity: 0 }}
@@ -423,7 +508,7 @@ export default function App() {
             className="flex w-full h-full overflow-hidden flex-col md:flex-row relative"
           >
             <div className={cn(
-              "w-full md:w-[280px] bg-m3-surface-container flex flex-col h-full z-20 transition-transform duration-300 absolute md:relative border-r border-m3-outline-variant/20 shadow-xl md:shadow-none",
+              "w-full md:w-[280px] bg-m3-surface-container/80 backdrop-blur-lg flex flex-col h-full z-20 transition-transform duration-300 absolute md:relative border-r border-m3-outline-variant/20 shadow-xl md:shadow-none",
               mobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
             )}>
               <div className="px-5 h-12 flex items-center justify-end drag-region relative">
@@ -493,32 +578,13 @@ export default function App() {
                 {displayedRegistry.map(item => {
                   const isActive = selectedKey?.key === item.key;
                   return (
-                    <motion.div
-                      variants={itemVariants}
+                    <RegistryItem
                       key={item.key}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer transition-all border border-transparent",
-                        isActive ? "bg-m3-secondary-container border-m3-secondary/20 shadow-md" : "hover:bg-m3-surface-container-high hover:border-m3-outline-variant/30"
-                      )}
-                      onClick={() => handleSelectKey(item)}
-                    >
-                      <div className={cn(
-                        "w-10 h-10 flex items-center justify-center shrink-0 rounded-[14px] transition-colors shadow-inner",
-                        isActive ? "bg-m3-secondary text-m3-on-secondary" : "bg-m3-surface-variant text-m3-on-surface-variant"
-                      )}>
-                        {getIcon(item.mimeType)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={cn("text-[13px] font-semibold truncate", isActive ? "text-m3-on-secondary-container" : "text-m3-on-surface")}>
-                          {item.key}
-                        </div>
-                        <div className={cn("text-[10px] flex gap-1.5 mt-0.5 font-medium", isActive ? "text-m3-on-secondary-container/80" : "text-m3-on-surface-variant")}>
-                          <span>{formatBytes(item.size)}</span>
-                          <span className="opacity-50">•</span>
-                          <span className="truncate">{item.mimeType.split('/')[1] || 'binary'}</span>
-                        </div>
-                      </div>
-                    </motion.div>
+                      item={item}
+                      isActive={isActive}
+                      onClick={handleSelectKey}
+                      onDoubleClick={handleDoubleClickKey}
+                    />
                   );
                 })}
                 {filteredRegistry.length > displayedRegistry.length && (
@@ -702,12 +768,15 @@ export default function App() {
                       key="empty"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="text-center flex flex-col items-center gap-6"
+                      className="text-center flex flex-col items-center gap-6 relative"
                     >
-                      <div className="w-32 h-32 rounded-full bg-m3-surface-container-high flex items-center justify-center text-m3-surface-variant shadow-inner border border-m3-outline-variant/10">
+                      {/* Premium background blur blob in empty state */}
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[30rem] h-[30rem] bg-m3-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse-subtle"></div>
+                      
+                      <div className="w-32 h-32 rounded-full bg-m3-surface-container-high flex items-center justify-center text-m3-surface-variant shadow-inner border border-m3-outline-variant/10 relative z-10">
                         <Box size={48} />
                       </div>
-                      <p className="text-sm font-medium text-m3-on-surface-variant max-w-[240px] leading-relaxed">
+                      <p className="text-sm font-medium text-m3-on-surface-variant max-w-[240px] leading-relaxed relative z-10">
                         Select an item to preview or upload a new file
                       </p>
                     </motion.div>
@@ -721,14 +790,14 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 bg-m3-surface/90 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6"
+                    className="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6"
                   >
                     <motion.div 
                       initial={{ scale: 0.9, y: 20 }}
                       animate={{ scale: 1, y: 0 }}
                       exit={{ scale: 0.9, y: 20 }}
                       transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                      className="w-full max-w-[460px] bg-m3-surface-container rounded-3xl p-8 flex flex-col gap-6 shadow-2xl border border-m3-outline-variant/30"
+                      className="w-full max-w-[460px] bg-m3-surface-container/90 backdrop-blur-xl rounded-3xl p-8 flex flex-col gap-6 shadow-2xl border border-m3-outline-variant/30"
                     >
                       <div className="flex justify-between items-center">
                         <h3 className="text-2xl font-semibold text-m3-on-surface tracking-tight">
@@ -809,6 +878,84 @@ export default function App() {
                           Start Upload
                         </motion.button>
                       </form>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {promptOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+                  >
+                    <motion.div 
+                      initial={{ scale: 0.9, y: 15 }}
+                      animate={{ scale: 1, y: 0 }}
+                      exit={{ scale: 0.9, y: 15 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      className="w-full max-w-[380px] bg-m3-surface-container/90 backdrop-blur-xl rounded-3xl p-6 flex flex-col gap-5 shadow-2xl border border-m3-outline-variant/30 relative"
+                    >
+                      <div className="flex flex-col gap-1.5">
+                        <h3 className="text-lg font-semibold text-m3-on-surface tracking-tight">
+                          Decrypt key:
+                        </h3>
+                        <p className="text-xs text-m3-primary font-mono truncate px-2.5 py-1 bg-m3-primary-container/20 rounded-md border border-m3-primary/10 select-all">
+                          {promptKey?.key}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-m3-on-surface-variant px-1">
+                          Encryption Token
+                        </label>
+                        <input
+                          type="password"
+                          autoFocus
+                          className="bg-m3-surface-container-high border border-m3-outline-variant/20 rounded-full text-m3-on-surface px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-m3-primary focus:border-transparent transition-all shadow-inner font-mono"
+                          placeholder="Optional AES token"
+                          value={promptTokenValue}
+                          onChange={(e) => setPromptTokenValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handlePromptSubmit(promptTokenValue);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex gap-2">
+                          <motion.button
+                            data-testid="modal-decrypt-btn"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handlePromptSubmit(promptTokenValue)}
+                            className="flex-1 bg-m3-primary hover:bg-m3-primary/90 text-m3-on-primary rounded-full py-2.5 text-xs font-bold shadow-md transition-colors"
+                          >
+                            Decrypt
+                          </motion.button>
+                          <motion.button
+                            data-testid="modal-skip-btn"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handlePromptSubmit('')}
+                            className="flex-1 bg-m3-surface-variant hover:bg-m3-surface-variant/80 text-m3-on-surface rounded-full py-2.5 text-xs font-bold border border-m3-outline-variant/30 transition-colors"
+                          >
+                            Skip
+                          </motion.button>
+                        </div>
+                        <motion.button
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => setPromptOpen(false)}
+                          className="w-full bg-transparent hover:bg-m3-surface-variant/30 text-m3-on-surface-variant rounded-full py-2 text-xs font-medium transition-colors"
+                        >
+                          Cancel
+                        </motion.button>
+                      </div>
                     </motion.div>
                   </motion.div>
                 )}
