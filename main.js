@@ -282,13 +282,8 @@ ipcMain.handle('grpc:keys', async (event, token) => {
 
     call.on('end', async () => {
       try {
-        const localRegistry = await readRegistry();
-        const registryMap = new Map();
-        localRegistry.forEach(item => registryMap.set(item.key, item));
-        keys.forEach(item => registryMap.set(item.key, item));
-        const mergedKeys = Array.from(registryMap.values());
-        await writeRegistry(mergedKeys);
-        resolve(mergedKeys);
+        await writeRegistry(keys);
+        resolve(keys);
       } catch (err) {
         reject(err);
       }
